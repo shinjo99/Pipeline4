@@ -1,0 +1,2552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>US Project Pipeline</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" onerror="console.warn('D3 CDN 로딩 실패')"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js" onerror="console.warn('TopoJSON CDN 로딩 실패')"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0F1117; --surface:#1A1D27; --surface2:#232636; --surface3:#2C3048;
+  --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.14);
+  --t1:#F0EFF4; --t2:#9B99A8; --t3:#5C5A70;
+  --blue:#4A90E2; --blue-d:#2563EB; --green:#34D399; --amber:#FBBF24;
+  --red:#F87171; --purple:#A78BFA;
+  --hwr:#4A90E2; --pg:#34D399; --qcells:#FBBF24;
+  --font:'SF Pro Display',-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;
+}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t1);font-size:14px;overflow:hidden}
+#root{display:flex;flex-direction:column;height:100vh}
+
+/* TOP BAR */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10}
+.tb-logo{display:flex;align-items:center;gap:8px;margin-right:8px}
+.tb-logo-mark{width:28px;height:28px;background:linear-gradient(135deg,#4A90E2,#7C3AED);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff}
+.tb-title{font-size:14px;font-weight:700;white-space:nowrap}
+.tb-sub{font-size:11px;color:var(--t3);margin-left:4px}
+.search-wrap{position:relative;flex:1;max-width:360px}
+.search-wrap input{width:100%;padding:7px 12px 7px 34px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:13px;font-family:var(--font)}
+.search-wrap input:focus{outline:none;border-color:var(--blue)}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:14px}
+.tb-filters{display:flex;gap:4px}
+.fchip{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--border2);background:none;color:var(--t2);cursor:pointer;font-family:var(--font)}
+.fchip:hover{background:var(--surface2)}
+.fchip.active{color:#fff;border-color:transparent}
+.fchip.hwr.active{background:var(--hwr)}
+.fchip.pg.active{background:var(--pg);color:#000}
+.fchip.qcells.active{background:var(--qcells);color:#000}
+.fchip.all.active{background:var(--surface3)}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.alert-btn{position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px}
+.alert-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface)}
+.stats-bar{display:flex;gap:12px;font-size:12px}
+.stat-item{color:var(--t3)} .stat-item strong{color:var(--t1);font-weight:600}
+
+/* MAIN LAYOUT */
+.main{display:flex;flex:1;min-height:0}
+
+/* SIDEBAR */
+.sidebar{width:260px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.sidebar-head-title{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em}
+.project-count{font-size:11px;color:var(--t3);background:var(--surface2);padding:2px 7px;border-radius:20px}
+.project-list{flex:1;overflow-y:auto;padding:6px}
+.project-list::-webkit-scrollbar{width:4px} .project-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.proj-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .1s;border:1px solid transparent}
+.proj-item:hover{background:var(--surface2)}
+.proj-item.active{background:var(--surface2);border-color:var(--border2)}
+.proj-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.proj-info{flex:1;min-width:0}
+.proj-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj-meta{font-size:10px;color:var(--t3);margin-top:1px}
+.proj-cap{font-size:11px;color:var(--t2);flex-shrink:0}
+.cat-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--surface3);color:var(--t2)}
+.cat-A{color:#F59E0B;background:rgba(245,158,11,.15)} .cat-B{color:#4A90E2;background:rgba(74,144,226,.15)} .cat-C{color:#A78BFA;background:rgba(167,139,250,.15)} .cat-D{color:#34D399;background:rgba(52,211,153,.15)}
+
+/* MAP */
+.map-container{flex:1;position:relative;overflow:hidden;background:var(--bg)}
+#map-svg{width:100%;height:100%}
+.state-path{fill:#1E2235;stroke:#2C3048;stroke-width:.5}
+.state-path:hover{fill:#252840}
+.state-label{font-size:8px;fill:#3C4060;font-family:var(--font);pointer-events:none;user-select:none}
+.proj-marker{cursor:pointer;transition:all .15s}
+.proj-marker circle{transition:all .15s}
+.proj-marker:hover circle{filter:brightness(1.3)}
+.proj-marker.selected circle{stroke-width:2.5;filter:brightness(1.3)}
+.map-tooltip{position:absolute;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;pointer-events:none;font-size:12px;min-width:160px;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.map-legend{position:absolute;bottom:16px;left:16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:11px}
+.legend-title{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.legend-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;color:var(--t2)}
+.map-zoom{position:absolute;top:16px;right:16px;display:flex;flex-direction:column;gap:4px}
+.zoom-btn{width:28px;height:28px;background:var(--surface);border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--t2)}
+.zoom-btn:hover{background:var(--surface2);color:var(--t1)}
+.iso-filter-bar{position:absolute;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 6px}
+.iso-chip{padding:3px 10px;border-radius:20px;font-size:11px;cursor:pointer;color:var(--t3);font-family:var(--font)}
+.iso-chip:hover{color:var(--t1)} .iso-chip.active{background:var(--surface2);color:var(--t1);font-weight:600}
+
+/* DETAIL PANEL */
+.detail-panel{width:420px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transform:translateX(100%);transition:transform .25s ease;position:absolute;right:0;top:0;bottom:0;z-index:20}
+.detail-panel.open{transform:translateX(0)}
+.dp-header{padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.dp-close{float:right;background:none;border:none;color:var(--t3);cursor:pointer;font-size:16px;line-height:1}
+.dp-close:hover{color:var(--t1)}
+.dp-portfolio{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.dp-name{font-size:18px;font-weight:700;line-height:1.2;margin-bottom:6px}
+.dp-chips{display:flex;gap:5px;flex-wrap:wrap}
+.dp-chip{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--surface2);color:var(--t2)}
+.dp-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 16px;flex-shrink:0;overflow-x:auto}
+.dp-tab{padding:9px 12px;font-size:12px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t3);cursor:pointer;white-space:nowrap;font-family:var(--font);margin-bottom:-1px}
+.dp-tab:hover{color:var(--t1)} .dp-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.dp-body{flex:1;overflow-y:auto;padding:16px}
+.dp-body::-webkit-scrollbar{width:4px} .dp-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* OVERVIEW TAB */
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.info-item{background:var(--surface2);border-radius:8px;padding:10px 12px}
+.info-label{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.info-value{font-size:14px;font-weight:600}
+.info-value.green{color:var(--green)} .info-value.blue{color:var(--blue)} .info-value.amber{color:var(--amber)}
+.section-title{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;margin-top:14px}
+.overview-desc{font-size:13px;color:var(--t2);line-height:1.6;background:var(--surface2);border-radius:8px;padding:12px;min-height:60px}
+.overview-desc[contenteditable="true"]:focus{outline:1px solid var(--blue)}
+.save-note{font-size:11px;color:var(--t3);margin-top:4px}
+
+/* FINANCIAL MODEL */
+.fin-section{background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:10px}
+.fin-section-title{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.fin-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fin-field{display:flex;flex-direction:column;gap:3px}
+.fin-field label{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.fin-field input,.fin-field select{padding:6px 9px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--t1);font-size:12px;font-family:var(--font)}
+.fin-field input:focus,.fin-field select:focus{outline:none;border-color:var(--blue)}
+.fin-results{background:var(--surface3);border-radius:10px;padding:14px;border:1px solid var(--border2)}
+.fin-results-title{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.fin-result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.fin-result-item{text-align:center;padding:10px 6px;background:var(--surface2);border-radius:8px}
+.fin-result-label{font-size:10px;color:var(--t3);margin-bottom:3px}
+.fin-result-val{font-size:18px;font-weight:800}
+.fin-result-val.good{color:var(--green)} .fin-result-val.ok{color:var(--amber)} .fin-result-val.bad{color:var(--red)}
+.fin-calc-btn{width:100%;padding:9px;background:var(--blue-d);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer;margin-top:8px}
+.fin-calc-btn:hover{opacity:.9}
+.cashflow-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px}
+.cashflow-table th{padding:5px 8px;background:var(--surface3);color:var(--t3);text-align:right;font-weight:600}
+.cashflow-table th:first-child{text-align:left}
+.cashflow-table td{padding:4px 8px;border-top:1px solid var(--border);color:var(--t2);text-align:right}
+.cashflow-table td:first-child{text-align:left;color:var(--t1)}
+.cf-pos{color:var(--green)!important} .cf-neg{color:var(--red)!important}
+
+/* BUDGET */
+.budget-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.budget-card{background:var(--surface2);border-radius:8px;padding:10px 12px;text-align:center}
+.budget-card-label{font-size:10px;color:var(--t3);margin-bottom:4px}
+.budget-card-val{font-size:16px;font-weight:700}
+.budget-progress{margin-bottom:12px}
+.bp-label{display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-bottom:4px}
+.bp-bar{height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}
+.bp-fill{height:100%;border-radius:3px;background:var(--blue);transition:width .4s}
+.bp-fill.over{background:var(--red)}
+.budget-list{display:flex;flex-direction:column;gap:4px}
+.budget-item{display:grid;grid-template-columns:1fr 80px 80px 80px;gap:6px;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:7px;font-size:12px}
+.budget-item-name{font-weight:500}
+.budget-item-val{text-align:right;color:var(--t2)}
+.budget-item-actual{text-align:right}
+.budget-item-pct{text-align:right;font-size:11px}
+.add-btn{display:flex;align-items:center;gap:5px;padding:7px 12px;background:none;border:1px dashed var(--border2);border-radius:7px;color:var(--t3);cursor:pointer;font-size:12px;font-family:var(--font);width:100%;justify-content:center;margin-top:6px}
+.add-btn:hover{border-color:var(--blue);color:var(--blue)}
+
+/* DOCUMENTS */
+.doc-upload-zone{border:1.5px dashed var(--border2);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:10px}
+.doc-upload-zone:hover,.dz-over{border-color:var(--blue);background:rgba(74,144,226,.04)}
+.duz-icon{font-size:28px;margin-bottom:6px}
+.duz-text{font-size:13px;color:var(--t2)} .duz-link{color:var(--blue);text-decoration:underline;cursor:pointer}
+.duz-hint{font-size:11px;color:var(--t3);margin-top:3px}
+.doc-category-filter{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
+.doc-cat-btn{padding:3px 9px;border-radius:20px;font-size:11px;border:1px solid var(--border);background:none;color:var(--t3);cursor:pointer;font-family:var(--font)}
+.doc-cat-btn.active{background:var(--surface2);color:var(--t1)}
+.doc-list{display:flex;flex-direction:column;gap:4px}
+.doc-item{display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--surface2);border-radius:8px;font-size:12px}
+.doc-icon{font-size:18px;flex-shrink:0}
+.doc-info{flex:1;min-width:0}
+.doc-name{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-meta{font-size:10px;color:var(--t3);margin-top:1px}
+.doc-actions{display:flex;gap:4px;flex-shrink:0}
+.doc-btn{padding:3px 8px;background:none;border:1px solid var(--border);border-radius:5px;font-size:10px;cursor:pointer;color:var(--t2);font-family:var(--font)}
+.doc-btn:hover{background:var(--surface3);color:var(--t1)}
+.doc-category-badge{font-size:9px;padding:1px 6px;border-radius:20px;background:var(--surface3);color:var(--t3);margin-right:4px}
+
+/* SCHEDULE */
+.schedule-alert-banner{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px}
+.sab-title{font-weight:700;color:var(--red);margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.milestone-list{display:flex;flex-direction:column;gap:6px}
+.milestone-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--border2)}
+.milestone-item.overdue{border-left-color:var(--red)}
+.milestone-item.today{border-left-color:var(--amber)}
+.milestone-item.upcoming{border-left-color:var(--blue)}
+.milestone-item.done{border-left-color:var(--green);opacity:.6}
+.ms-icon{font-size:16px;flex-shrink:0}
+.ms-info{flex:1}
+.ms-name{font-size:13px;font-weight:500}
+.ms-date{font-size:11px;color:var(--t3);margin-top:1px}
+.ms-status{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;flex-shrink:0}
+.ms-status.overdue{background:rgba(248,113,113,.15);color:var(--red)}
+.ms-status.today{background:rgba(251,191,36,.15);color:var(--amber)}
+.ms-status.upcoming{background:rgba(74,144,226,.15);color:var(--blue)}
+.ms-status.done{background:rgba(52,211,153,.15);color:var(--green)}
+.ms-actions{display:flex;gap:4px}
+.ms-toggle{padding:3px 8px;background:none;border:1px solid var(--border);border-radius:5px;font-size:10px;cursor:pointer;color:var(--t2);font-family:var(--font)}
+.ms-toggle:hover{background:var(--surface3)}
+
+/* INPUTS & FORMS */
+input,textarea,select{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--t1);font-family:var(--font)}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.form-field{display:flex;flex-direction:column;gap:3px}
+.form-field label{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.form-field input,.form-field select{padding:6px 9px;font-size:12px}
+.form-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:10px}
+.btn-cancel{padding:6px 13px;background:none;border:1px solid var(--border2);border-radius:7px;color:var(--t2);cursor:pointer;font-size:12px;font-family:var(--font)}
+.btn-save{padding:6px 16px;background:var(--blue-d);color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--font)}
+.mini-modal{background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:10px;border:1px solid var(--border2)}
+.mini-modal-title{font-size:12px;font-weight:700;margin-bottom:10px}
+
+/* ALERT PANEL */
+.alert-panel{position:absolute;top:52px;right:0;width:320px;background:var(--surface);border:1px solid var(--border2);border-radius:0 0 10px 10px;z-index:50;box-shadow:0 16px 48px rgba(0,0,0,.6);max-height:400px;overflow-y:auto;display:none}
+.alert-panel.open{display:block}
+.alert-panel-head{padding:12px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700}
+.alert-entry{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.ae-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.ae-info .ae-title{font-size:12px;font-weight:600}
+.ae-info .ae-sub{font-size:11px;color:var(--t3);margin-top:1px}
+
+/* NO SELECTION */
+.no-selection{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--t3);gap:10px}
+.no-selection-icon{font-size:48px;opacity:.3}
+.no-selection-text{font-size:14px}
+
+@media(max-width:900px){
+  .sidebar{width:200px}
+  .detail-panel{width:360px}
+}
+
+/* ── AI PANEL ── */
+.ai-fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#8B5CF6);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 24px rgba(99,102,241,.5);z-index:300;transition:transform .2s,box-shadow .2s}
+.ai-fab:hover{transform:scale(1.08);box-shadow:0 6px 32px rgba(99,102,241,.7)}
+.ai-fab .ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;background:var(--red);border-radius:50%;font-size:9px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);display:none}
+.ai-panel{position:fixed;bottom:88px;right:24px;width:420px;max-width:calc(100vw - 48px);background:var(--surface);border:1px solid rgba(99,102,241,.3);border-radius:16px;box-shadow:0 16px 64px rgba(0,0,0,.6);z-index:299;display:flex;flex-direction:column;overflow:hidden;transform:translateY(20px) scale(.95);opacity:0;pointer-events:none;transition:all .2s ease}
+.ai-panel.open{transform:translateY(0) scale(1);opacity:1;pointer-events:all}
+.ai-panel-header{padding:14px 16px;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.15));border-bottom:1px solid rgba(99,102,241,.2);display:flex;align-items:center;gap:10px}
+.ai-panel-icon{font-size:20px}
+.ai-panel-title{flex:1;font-size:13px;font-weight:700}
+.ai-panel-sub{font-size:10px;color:var(--t3)}
+.ai-panel-close{background:none;border:none;color:var(--t3);cursor:pointer;font-size:16px;padding:2px 6px}
+.ai-panel-close:hover{color:var(--t1)}
+.ai-quick-actions{display:flex;gap:6px;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.ai-qa-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;font-size:11px;color:var(--t2);cursor:pointer;font-family:var(--font);transition:all .1s;white-space:nowrap}
+.ai-qa-btn:hover{background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.4);color:var(--t1)}
+.ai-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:200px;max-height:340px}
+.ai-messages::-webkit-scrollbar{width:3px}.ai-messages::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.ai-msg{display:flex;gap:8px;align-items:flex-start}
+.ai-msg.user{flex-direction:row-reverse}
+.ai-msg-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px}
+.ai-msg.assistant .ai-msg-avatar{background:linear-gradient(135deg,#6366F1,#8B5CF6)}
+.ai-msg.user .ai-msg-avatar{background:var(--surface3);font-size:10px}
+.ai-msg-bubble{max-width:85%;padding:9px 12px;border-radius:12px;font-size:12px;line-height:1.6}
+.ai-msg.assistant .ai-msg-bubble{background:var(--surface2);color:var(--t1);border-radius:4px 12px 12px 12px}
+.ai-msg.user .ai-msg-bubble{background:rgba(99,102,241,.2);color:var(--t1);border-radius:12px 4px 12px 12px}
+.ai-msg-bubble strong{color:var(--blue)}
+.ai-msg-bubble .ai-md h2{font-size:12px;font-weight:700;margin:8px 0 4px;color:var(--t1)}
+.ai-msg-bubble .ai-md ul{padding-left:14px;margin:4px 0}
+.ai-msg-bubble .ai-md li{margin:2px 0;color:var(--t2)}
+.ai-msg-bubble .ai-md p{margin:4px 0;color:var(--t2)}
+.ai-typing{display:flex;gap:4px;align-items:center;padding:4px 0}
+.ai-typing span{width:6px;height:6px;background:var(--t3);border-radius:50%;animation:bounce .8s infinite}
+.ai-typing span:nth-child(2){animation-delay:.15s}.ai-typing span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+.ai-input-row{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border)}
+.ai-input{flex:1;padding:8px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;color:var(--t1);font-size:12px;font-family:var(--font);resize:none;max-height:80px}
+.ai-input:focus{outline:none;border-color:rgba(99,102,241,.5)}
+.ai-send{width:34px;height:34px;background:linear-gradient(135deg,#6366F1,#8B5CF6);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;align-self:flex-end}
+.ai-send:hover{opacity:.88}
+/* Doc AI result */
+.ai-doc-result{background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:12px;margin-top:8px;font-size:12px;line-height:1.7;color:var(--t2)}
+.ai-doc-result-title{font-size:11px;font-weight:700;color:rgba(139,92,246,.9);margin-bottom:8px;display:flex;align-items:center;gap:5px}
+.ai-analyze-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:20px;font-size:10px;color:rgba(139,92,246,.9);cursor:pointer;font-family:var(--font);transition:all .15s}
+.ai-analyze-btn:hover{background:rgba(99,102,241,.25)}
+.ai-analyze-btn.loading{opacity:.6;pointer-events:none}
+/* NL search */
+.search-ai-toggle{padding:4px 8px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:6px;font-size:10px;color:rgba(139,92,246,.9);cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0}
+.search-ai-toggle.active{background:rgba(99,102,241,.3)}
+.search-ai-hint{font-size:10px;color:rgba(139,92,246,.7);position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none}
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="topbar">
+    <div class="tb-logo">
+      <div class="tb-logo-mark">US</div>
+      <span class="tb-title">Project Pipeline</span>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="프로젝트 검색 (이름, 주, ISO...)">
+      <span class="search-ai-hint" id="ai-search-hint" style="display:none">AI 🤖</span>
+    </div>
+    <button class="search-ai-toggle" id="ai-search-toggle">🤖 AI 검색</button>
+    <div class="tb-filters">
+      <button class="fchip all active" data-portfolio="all">전체</button>
+      <button class="fchip hwr" data-portfolio="HWR">HWR</button>
+      <button class="fchip qcells" data-portfolio="Q-cells">Q-cells</button>
+    </div>
+    <div class="tb-right">
+      <div class="stats-bar">
+        <div class="stat-item">총 <strong id="stat-total">-</strong>개</div>
+        <div class="stat-item">PV <strong id="stat-pv" class="blue">-</strong> MWac</div>
+        <div class="stat-item">ESS <strong id="stat-ess" class="green">-</strong> MW</div>
+      </div>
+      <!-- 환율 표시 & 설정 -->
+      <div id="fx-badge" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-size:11px;cursor:pointer" title="환율 설정" onclick="openFXModal()">
+        <span style="color:var(--t3)">USD/KRW</span>
+        <strong id="fx-rate" style="color:var(--amber)">-</strong>
+        <span style="color:var(--t3);font-size:10px">⚙</span>
+      </div>
+      <!-- 통화 전환 -->
+      <button id="btn-currency" onclick="toggleCurrency()" style="padding:4px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-size:11px;cursor:pointer;color:var(--t2);font-family:var(--font)">
+        <span id="currency-label">$ USD</span>
+      </button>
+      <!-- 한/영 전환 -->
+      <button id="btn-lang" onclick="toggleLang()" style="padding:4px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;color:var(--t2);font-family:var(--font)">KO</button>
+      <div class="alert-btn" id="alert-btn">
+        🔔
+        <div class="alert-dot" id="alert-dot" style="display:none"></div>
+      </div>
+      <button class="tb-page-btn" id="btn-divestment">💰 매각현황</button>
+      <button class="tb-page-btn" id="btn-atlas" style="background:rgba(74,144,226,.12);border-color:rgba(74,144,226,.3);color:var(--blue)">🏔 Atlas</button>
+      <button class="tb-page-btn" id="btn-ppa" style="background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.3);color:var(--purple)">⚡ PPA</button>
+    </div>
+  </div>
+
+  <div class="alert-panel" id="alert-panel">
+    <div class="alert-panel-head">📅 일정 알림</div>
+    <div id="alert-list"></div>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-head">
+        <span class="sidebar-section-label">프로젝트 목록</span>
+        <span class="project-count" id="proj-count">-</span>
+      </div>
+      <div class="project-list" id="proj-list"></div>
+    </div>
+
+    <div class="map-container" id="map-container">
+      <svg id="map-svg"></svg>
+      <div class="map-legend">
+        <div class="legend-title">포트폴리오</div>
+        <div class="legend-row"><span style="width:10px;height:10px;border-radius:50%;background:var(--hwr);display:inline-block"></span> HWR</div>
+        <div class="legend-row"><span style="width:10px;height:10px;border-radius:50%;background:var(--qcells);display:inline-block"></span> Q-cells</div>
+        <div class="legend-title" style="margin-top:8px">유형</div>
+        <div class="legend-row"><span style="width:10px;height:10px;border-radius:50%;background:#fff;display:inline-block;opacity:.7"></span> PV</div>
+        <div class="legend-row"><span style="width:10px;height:10px;border:2px solid #fff;border-radius:50%;display:inline-block;opacity:.7;width:10px;height:10px"></span> PV+ESS</div>
+      </div>
+      <div class="map-zoom">
+        <div class="zoom-btn" id="zoom-in">+</div>
+        <div class="zoom-btn" id="zoom-out">−</div>
+        <div class="zoom-btn" id="zoom-reset" style="font-size:10px">⊙</div>
+      </div>
+      <div id="map-tooltip" class="map-tooltip" style="display:none"></div>
+    </div>
+
+    <div class="detail-panel" id="detail-panel">
+      <div id="detail-content">
+        <div class="no-selection">
+          <div class="no-selection-icon">🗺️</div>
+          <div class="no-selection-text">프로젝트를 선택하세요</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 매각현황 페이지 (오버레이) -->
+<div id="page-divestment" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;padding:28px 32px">
+  <div style="max-width:1100px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <div class="div-page-title" style="font-size:20px;font-weight:800;margin-bottom:4px">💰 매각현황 (2026년)</div>
+        <div class="div-page-sub" style="font-size:13px;color:var(--t2)">8개 프로젝트 · 예상 총 매각이익 $142M</div>
+      </div>
+      <button id="close-divestment" style="padding:8px 18px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer;color:var(--t1);font-family:var(--font)">← 파이프라인으로</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="div-kpi"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:13px" id="div-table"></table>
+    </div>
+    <div style="margin-top:12px;padding:10px 14px;background:var(--surface);border-radius:8px;font-size:11px;color:var(--t3);border:1px solid var(--border)">
+      단계 가중치: 준비 0% → NDA/티저 20% → NBO 40% → BO 60% → SPA협상 80% → 클로징 100%
+    </div>
+  </div>
+</div>
+
+<!-- Atlas Milestone 페이지 -->
+<div id="page-atlas" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;padding:28px 32px">
+  <div style="max-width:900px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <div class="atlas-page-title" style="font-size:20px;font-weight:800;margin-bottom:4px">🏔 Atlas North 1st Milestone</div>
+        <div class="atlas-page-sub" style="font-size:13px;color:var(--t2)">Lydian 1st Milestone Payment 조건 달성 현황</div>
+      </div>
+      <button id="close-atlas" style="padding:8px 18px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer;color:var(--t1);font-family:var(--font)">← 파이프라인으로</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="atlas-kpi"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px" id="atlas-progress-bar"></div>
+    <div id="atlas-list"></div>
+  </div>
+</div>
+
+<!-- PPA 현황 페이지 -->
+<div id="page-ppa" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;padding:28px 32px">
+  <div style="max-width:1000px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <div class="ppa-page-title" style="font-size:20px;font-weight:800;margin-bottom:4px">⚡ PPA 진척 현황</div>
+        <div class="ppa-page-sub" style="font-size:13px;color:var(--t2)">프로젝트별 PPA 단계 관리</div>
+      </div>
+      <button id="close-ppa" style="padding:8px 18px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer;color:var(--t1);font-family:var(--font)">← 파이프라인으로</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="ppa-kpi"></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px" id="ppa-funnel"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:13px" id="ppa-table"></table>
+    </div>
+  </div>
+</div>
+<!-- 환율 설정 모달 -->
+<div id="fx-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:28px;width:480px;max-width:calc(100vw - 40px);max-height:calc(100vh - 80px);overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:16px;font-weight:800">💱 환율 설정</div>
+        <div style="font-size:12px;color:var(--t2);margin-top:2px">당해년도 월별 · 미래연도 연간 입력</div>
+      </div>
+      <button onclick="closeFXModal()" style="background:none;border:none;color:var(--t2);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--t2);display:flex;align-items:center;justify-content:space-between">
+      <span>실시간 참고 환율: <strong id="fx-ref-rate" style="color:var(--amber)">조회중...</strong></span>
+      <button onclick="fillFromLive()" style="padding:4px 10px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;font-size:11px;cursor:pointer;color:var(--t2);font-family:var(--font)">전체 적용</button>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px" id="fx-current-year-label"></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="fx-monthly-grid"></div>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">미래 연도 (연간)</div>
+      <div style="display:flex;flex-direction:column;gap:6px" id="fx-yearly-grid"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeFXModal()" style="padding:8px 18px;background:none;border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer;color:var(--t2);font-family:var(--font)">취소</button>
+      <button onclick="saveFX()" style="padding:8px 18px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font)">저장</button>
+    </div>
+  </div>
+</div>
+
+<button class="ai-fab" id="ai-fab" title="AI 어시스트">✨</button>
+
+<!-- AI PANEL -->
+<div class="ai-panel" id="ai-panel">
+  <div class="ai-panel-header">
+    <div class="ai-panel-icon">✨</div>
+    <div><div class="ai-panel-title">AI 어시스트</div><div class="ai-panel-sub">포트폴리오 분석 · 문서 분석 · 자연어 검색</div></div>
+    <button class="ai-panel-close" id="ai-panel-close">✕</button>
+  </div>
+  <div class="ai-quick-actions">
+    <button class="ai-qa-btn" data-action="report">📊 포트폴리오 리포트</button>
+    <button class="ai-qa-btn" data-action="risk">⚠️ 리스크 분석</button>
+    <button class="ai-qa-btn" data-action="cod">📅 COD 현황</button>
+    <button class="ai-qa-btn" data-action="finance">💰 재무 요약</button>
+  </div>
+  <div class="ai-messages" id="ai-messages">
+    <div class="ai-msg assistant">
+      <div class="ai-msg-avatar">✨</div>
+      <div class="ai-msg-bubble">안녕하세요! US 프로젝트 파이프라인 AI 어시스트입니다.<br><br>
+      <strong>할 수 있는 것:</strong><br>
+      • 포트폴리오 현황 분석 및 경영진 리포트 생성<br>
+      • 업로드한 계약서·품의서 핵심 조항 분석<br>
+      • 재무 벤치마크 (시장 기준 CAPEX·IRR 참고값)<br>
+      • 자연어로 프로젝트 검색 (상단 🤖 버튼)<br><br>
+      위 버튼으로 빠르게 시작하거나 질문을 입력하세요.
+      </div>
+    </div>
+  </div>
+  <div class="ai-input-row">
+    <textarea class="ai-input" id="ai-input" placeholder="예: PJM 지역 대용량 ESS 프로젝트 현황은?" rows="1"></textarea>
+    <button class="ai-send" id="ai-send">➤</button>
+  </div>
+</div>
+
+<script>
+// 여기에 붙여넣으세요
+const password = prompt("비밀번호를 입력하세요.");
+if (password !== "hanwha1234") { 
+    alert("비밀번호가 틀렸습니다.");
+    document.body.innerHTML = "<div style='color:white; background:#0F1117; height:100vh; display:flex; align-items:center; justify-content:center; font-family:sans-serif;'>접근 권한이 없습니다.</div>";
+    window.stop();
+}
+// 원래 있던 코드들이 이어집니다...
+// ─── PROJECT DATA ─────────────────────────────────────────────
+const PROJECTS = [
+// HWR
+{id:'h01',portfolio:'HWR',name:'Muddy Creek',cat:'B',ntp:2026,cod:2027,type:'PV+ESS',pv:199,ess:199,state:'OR',iso:'WECC',blm:false},
+{id:'h02',portfolio:'HWR',name:'Neptune',cat:'B',ntp:2026,cod:2027,type:'PV',pv:199,ess:0,state:'UT',iso:'WECC',blm:false},
+{id:'h03',portfolio:'HWR',name:'Florence',cat:'B',ntp:2027,cod:2028,type:'PV',pv:99,ess:0,state:'WI',iso:'MISO',blm:false},
+{id:'h04',portfolio:'HWR',name:'Maplehurst',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:75,ess:75,state:'NY',iso:'NYISO',blm:false},
+{id:'h05',portfolio:'HWR',name:'Nickel Plate',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:230,ess:230,state:'IN',iso:'PJM',blm:false},
+{id:'h06',portfolio:'HWR',name:'Stone Fruit',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:100,ess:100,state:'MI',iso:'PJM',blm:false},
+{id:'h07',portfolio:'HWR',name:'Treacle Creek',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:100,ess:100,state:'OH',iso:'PJM',blm:false},
+{id:'h08',portfolio:'HWR',name:'Bay City',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:290,ess:290,state:'NC',iso:'SERC',blm:false},
+{id:'h09',portfolio:'HWR',name:'Borden',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:87,ess:87,state:'NC',iso:'SERC',blm:false},
+{id:'h10',portfolio:'HWR',name:'Appaloosa 2',cat:'B',ntp:2027,cod:2028,type:'PV',pv:65,ess:0,state:'WA',iso:'WECC',blm:false},
+{id:'h11',portfolio:'HWR',name:'Black Star',cat:'B',ntp:2027,cod:2028,type:'PV',pv:300,ess:0,state:'CO',iso:'WECC',blm:false},
+{id:'h12',portfolio:'HWR',name:'Martha Fields',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:400,ess:200,state:'ID',iso:'WECC',blm:false},
+{id:'h13',portfolio:'HWR',name:'Triton',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:199,ess:199,state:'UT',iso:'WECC',blm:false},
+{id:'h14',portfolio:'HWR',name:'Twinkle',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:199,ess:199,state:'CO',iso:'WECC',blm:false},
+{id:'h15',portfolio:'HWR',name:'Midfield',cat:'B',ntp:2027,cod:2029,type:'PV+ESS',pv:150,ess:50,state:'TX',iso:'ERCOT',blm:false},
+{id:'h16',portfolio:'HWR',name:'High Desert',cat:'B',ntp:2028,cod:2029,type:'PV+ESS',pv:199,ess:100,state:'WA',iso:'WECC',blm:false},
+{id:'h17',portfolio:'HWR',name:'Lone Star',cat:'C',ntp:2028,cod:2029,type:'PV+ESS',pv:150,ess:50,state:'TX',iso:'ERCOT',blm:false},
+{id:'h18',portfolio:'HWR',name:'Moffett II',cat:'C',ntp:2028,cod:2029,type:'PV',pv:75,ess:0,state:'SC',iso:'SERC',blm:false},
+{id:'h19',portfolio:'HWR',name:'SD Greenfield',cat:'C',ntp:2028,cod:2029,type:'PV',pv:75,ess:0,state:'SD',iso:'SPP',blm:false},
+{id:'h20',portfolio:'HWR',name:'Mariposa',cat:'C',ntp:2027,cod:2029,type:'PV+ESS',pv:412,ess:412,state:'AZ',iso:'WECC',blm:false},
+{id:'h21',portfolio:'HWR',name:'Sutherland Energy Park',cat:'C',ntp:2029,cod:2030,type:'PV+ESS',pv:500,ess:600,state:'VA',iso:'PJM',blm:false},
+{id:'h22',portfolio:'HWR',name:'Georgia Power Greenfield',cat:'C',ntp:2030,cod:2032,type:'PV',pv:100,ess:0,state:'GA',iso:'SERC',blm:false},
+{id:'h23',portfolio:'HWR',name:'Concord',cat:'D',ntp:2027,cod:2028,type:'ESS',pv:0,ess:100,state:'MA',iso:'ISO-NE',blm:false},
+{id:'h24',portfolio:'HWR',name:'Deerfield',cat:'D',ntp:2027,cod:2028,type:'ESS',pv:0,ess:100,state:'RI',iso:'ISO-NE',blm:false},
+{id:'h25',portfolio:'HWR',name:'Grandview',cat:'D',ntp:2027,cod:2028,type:'ESS',pv:0,ess:140,state:'PA',iso:'PJM',blm:false},
+{id:'h26',portfolio:'HWR',name:'Keystone',cat:'D',ntp:2027,cod:2028,type:'ESS',pv:0,ess:110,state:'CO',iso:'WECC',blm:false},
+{id:'h27',portfolio:'HWR',name:'Wagon Wheel',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:105,state:'CA',iso:'CAISO',blm:false},
+{id:'h28',portfolio:'HWR',name:'Lavender',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:230,state:'TX',iso:'ERCOT',blm:false},
+{id:'h29',portfolio:'HWR',name:'Taormina',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:230,state:'TX',iso:'ERCOT',blm:false},
+{id:'h30',portfolio:'HWR',name:'Greenfall',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:100,state:'CT',iso:'ISO-NE',blm:false},
+{id:'h31',portfolio:'HWR',name:'Merrimack',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:100,state:'MA',iso:'ISO-NE',blm:false},
+{id:'h32',portfolio:'HWR',name:'Cedar',cat:'D',ntp:2027,cod:2029,type:'ESS',pv:0,ess:150,state:'MN',iso:'MISO',blm:false},
+{id:'h33',portfolio:'HWR',name:'Double Toll Gate',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:110,state:'VA',iso:'PJM',blm:false},
+{id:'h34',portfolio:'HWR',name:'Glen Gardner',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:280,state:'NJ',iso:'PJM',blm:false},
+{id:'h35',portfolio:'HWR',name:'Leopard',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:130,state:'VA',iso:'PJM',blm:false},
+{id:'h36',portfolio:'HWR',name:'Livorno',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:130,state:'PA',iso:'PJM',blm:false},
+{id:'h37',portfolio:'HWR',name:'Messina',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:50,state:'PA',iso:'PJM',blm:false},
+{id:'h38',portfolio:'HWR',name:'Palermo',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:140,state:'VA',iso:'PJM',blm:false},
+{id:'h39',portfolio:'HWR',name:'Salerno',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:83,state:'PA',iso:'PJM',blm:false},
+{id:'h40',portfolio:'HWR',name:'Valley',cat:'D',ntp:2028,cod:2029,type:'ESS',pv:0,ess:210,state:'VA',iso:'PJM',blm:false},
+// 174PG
+{id:'p01',portfolio:'HWR',name:'Atlas 12',cat:'A',ntp:2026,cod:2027,type:'PV+ESS',pv:454,ess:225,state:'AZ',iso:'CAISO',blm:true},
+{id:'p02',portfolio:'HWR',name:'Atlas 13',cat:'A',ntp:2026,cod:2027,type:'PV+ESS',pv:454,ess:225,state:'AZ',iso:'CAISO',blm:true},
+{id:'p03',portfolio:'HWR',name:'Oberon 2',cat:'A',ntp:2026,cod:2027,type:'PV',pv:127,ess:0,state:'TX',iso:'MISO',blm:false},
+{id:'p04',portfolio:'HWR',name:'Boulder Solar 3',cat:'A',ntp:2025,cod:2027,type:'PV+ESS',pv:205,ess:128,state:'NV',iso:'WECC',blm:false},
+{id:'p05',portfolio:'HWR',name:'Atlas 14',cat:'A',ntp:2027,cod:2028,type:'PV',pv:182,ess:0,state:'AZ',iso:'CAISO',blm:false},
+{id:'p06',portfolio:'HWR',name:'Atlas 15',cat:'A',ntp:2027,cod:2028,type:'PV',pv:115,ess:0,state:'AZ',iso:'CAISO',blm:true},
+{id:'p07',portfolio:'HWR',name:'Atlas 3',cat:'A',ntp:2027,cod:2028,type:'PV',pv:60,ess:0,state:'AZ',iso:'CAISO',blm:false},
+{id:'p08',portfolio:'HWR',name:'Oberon 4',cat:'A',ntp:2026,cod:2028,type:'PV',pv:244,ess:0,state:'TX',iso:'ERCOT',blm:false},
+{id:'p09',portfolio:'HWR',name:'Oberon 3',cat:'B',ntp:2027,cod:2028,type:'PV',pv:250,ess:0,state:'TX',iso:'ERCOT',blm:false},
+{id:'p10',portfolio:'HWR',name:'Willow Creek 1',cat:'B',ntp:2027,cod:2028,type:'PV+ESS',pv:30,ess:24,state:'ID',iso:'WECC',blm:false},
+{id:'p11',portfolio:'HWR',name:'Bonanza Peak 1',cat:'B',ntp:2027,cod:2029,type:'PV',pv:500,ess:0,state:'CA',iso:'CAISO',blm:false},
+{id:'p12',portfolio:'HWR',name:'Bonanza Peak 2',cat:'B',ntp:2027,cod:2029,type:'PV',pv:125,ess:0,state:'CA',iso:'CAISO',blm:false},
+{id:'p13',portfolio:'HWR',name:'Bonanza Peak 3',cat:'B',ntp:2027,cod:2029,type:'PV',pv:125,ess:0,state:'NV',iso:'CAISO',blm:false},
+{id:'p14',portfolio:'HWR',name:'Barkley Creek',cat:'B',ntp:2027,cod:2029,type:'PV',pv:375,ess:0,state:'TX',iso:'ERCOT',blm:false},
+{id:'p15',portfolio:'HWR',name:'Greasewood',cat:'B',ntp:2027,cod:2029,type:'PV+ESS',pv:375,ess:75,state:'TX',iso:'ERCOT',blm:false},
+{id:'p16',portfolio:'HWR',name:'Willow Creek 2',cat:'B',ntp:2028,cod:2029,type:'PV+ESS',pv:50,ess:40,state:'ID',iso:'WECC',blm:false},
+{id:'p17',portfolio:'HWR',name:'Apelt Ranch',cat:'B',ntp:2027,cod:2029,type:'PV+ESS',pv:500,ess:100,state:'CO',iso:'WECC',blm:false},
+{id:'p18',portfolio:'HWR',name:'Prairie Ridge',cat:'B',ntp:2027,cod:2029,type:'PV+ESS',pv:500,ess:200,state:'CO',iso:'WECC',blm:false},
+{id:'p19',portfolio:'HWR',name:'Cedar Ridge',cat:'B',ntp:2027,cod:2029,type:'PV',pv:625,ess:0,state:'UT',iso:'WECC',blm:false},
+{id:'p20',portfolio:'HWR',name:'Backline',cat:'B',ntp:2027,cod:2029,type:'PV+ESS',pv:250,ess:199,state:'OR',iso:'WECC',blm:false},
+{id:'p21',portfolio:'HWR',name:'Winger',cat:'B',ntp:2028,cod:2029,type:'PV+ESS',pv:70,ess:56,state:'OR',iso:'WECC',blm:false},
+{id:'p22',portfolio:'HWR',name:'Sixmile',cat:'B',ntp:2028,cod:2029,type:'PV+ESS',pv:125,ess:100,state:'UT',iso:'WECC',blm:false},
+{id:'p23',portfolio:'HWR',name:'Intermountain',cat:'B',ntp:2027,cod:2029,type:'PV+ESS',pv:350,ess:285,state:'UT',iso:'WECC',blm:false},
+{id:'p24',portfolio:'HWR',name:'Swamp Fox',cat:'B',ntp:2028,cod:2030,type:'PV',pv:125,ess:0,state:'MS',iso:'MISO',blm:false},
+{id:'p25',portfolio:'HWR',name:'Iris',cat:'B',ntp:2029,cod:2030,type:'PV+ESS',pv:95,ess:76,state:'NM',iso:'WECC',blm:false},
+{id:'p26',portfolio:'HWR',name:'Pendleton',cat:'B',ntp:2029,cod:2030,type:'PV+ESS',pv:25,ess:20,state:'UT',iso:'WECC',blm:false},
+{id:'p27',portfolio:'HWR',name:'Umatilla',cat:'B',ntp:2029,cod:2030,type:'PV+ESS',pv:25,ess:20,state:'UT',iso:'WECC',blm:false},
+{id:'p28',portfolio:'HWR',name:'Cedar Ridge 2',cat:'B',ntp:2029,cod:2030,type:'PV+ESS',pv:50,ess:40,state:'UT',iso:'WECC',blm:false},
+{id:'p29',portfolio:'HWR',name:'Willow Creek 3',cat:'B',ntp:2028,cod:2030,type:'PV+ESS',pv:50,ess:40,state:'ID',iso:'WECC',blm:false},
+{id:'p30',portfolio:'HWR',name:'Magnolia',cat:'C',ntp:2029,cod:2031,type:'PV',pv:150,ess:0,state:'MS',iso:'MISO',blm:false},
+{id:'p31',portfolio:'HWR',name:'Crooked Creek',cat:'C',ntp:2029,cod:2031,type:'PV+ESS',pv:236,ess:100,state:'MS',iso:'MISO',blm:false},
+{id:'p32',portfolio:'HWR',name:'Arroyo',cat:'C',ntp:2029,cod:2031,type:'PV+ESS',pv:375,ess:150,state:'TX',iso:'SPP',blm:false},
+{id:'p33',portfolio:'HWR',name:'Diamond Solar',cat:'C',ntp:2029,cod:2031,type:'PV+ESS',pv:248,ess:199,state:'WY',iso:'WECC',blm:false},
+{id:'p34',portfolio:'HWR',name:'Lupine',cat:'C',ntp:2030,cod:2031,type:'PV+ESS',pv:95,ess:75,state:'NM',iso:'WECC',blm:false},
+{id:'p35',portfolio:'HWR',name:'Sisters Storage',cat:'D',ntp:2027,cod:2028,type:'ESS',pv:0,ess:100,state:'TX',iso:'ERCOT',blm:false},
+{id:'p36',portfolio:'HWR',name:'Harlem River',cat:'D',ntp:2028,cod:2030,type:'ESS',pv:0,ess:100,state:'NY',iso:'NYISO',blm:false},
+{id:'p37',portfolio:'HWR',name:'Boulder 5',cat:'D',ntp:2029,cod:2030,type:'ESS',pv:0,ess:200,state:'NV',iso:'WECC',blm:false},
+{id:'p38',portfolio:'HWR',name:'Boulder 6',cat:'D',ntp:2029,cod:2030,type:'ESS',pv:0,ess:200,state:'NV',iso:'WECC',blm:false},
+{id:'p39',portfolio:'HWR',name:'Saguaro Peak',cat:'D',ntp:2029,cod:2030,type:'ESS',pv:0,ess:282,state:'AZ',iso:'WECC',blm:false},
+{id:'p40',portfolio:'HWR',name:'La Fuente',cat:'D',ntp:2029,cod:2031,type:'ESS',pv:0,ess:200,state:'CA',iso:'CAISO',blm:false},
+{id:'p41',portfolio:'HWR',name:'Campito Peak',cat:'D',ntp:2029,cod:2031,type:'ESS',pv:0,ess:550,state:'CA',iso:'CAISO',blm:false},
+{id:'p42',portfolio:'HWR',name:'Reed Meadow',cat:'D',ntp:2029,cod:2031,type:'ESS',pv:0,ess:550,state:'NV',iso:'CAISO',blm:false},
+{id:'p43',portfolio:'HWR',name:'Westchester',cat:'D',ntp:2029,cod:2031,type:'ESS',pv:0,ess:274,state:'NY',iso:'NYISO',blm:false},
+{id:'p44',portfolio:'HWR',name:'Staten Island',cat:'D',ntp:2029,cod:2031,type:'ESS',pv:0,ess:349,state:'NY',iso:'NYISO',blm:false},
+{id:'p45',portfolio:'HWR',name:'Oberon 2 (MISO)',cat:'A',ntp:2026,cod:2027,type:'PV',pv:127,ess:0,state:'TX',iso:'MISO',blm:false},
+// Q-cells
+{id:'q01',portfolio:'Q-cells',name:'Atlas 5',cat:'—',ntp:2025,cod:2026,type:'PV',pv:200,ess:0,state:'AZ',iso:'CAISO',blm:false},
+{id:'q02',portfolio:'Q-cells',name:'Atlas 6',cat:'—',ntp:2025,cod:2026,type:'PV',pv:100,ess:0,state:'AZ',iso:'CAISO',blm:false},
+{id:'q03',portfolio:'Q-cells',name:'Atlas 10',cat:'—',ntp:2025,cod:2026,type:'PV',pv:225,ess:0,state:'AZ',iso:'CAISO',blm:true},
+{id:'q04',portfolio:'Q-cells',name:'Atlas 11',cat:'—',ntp:2025,cod:2026,type:'PV',pv:200,ess:0,state:'AZ',iso:'CAISO',blm:true},
+{id:'q05',portfolio:'Q-cells',name:'White Pine Grove',cat:'—',ntp:2025,cod:2026,type:'PV',pv:100,ess:0,state:'MI',iso:'MISO',blm:false},
+{id:'q06',portfolio:'Q-cells',name:'Dandelion',cat:'—',ntp:2026,cod:2028,type:'PV+ESS',pv:241,ess:100,state:'AZ',iso:'CAISO',blm:false},
+{id:'q07',portfolio:'Q-cells',name:'Ursa',cat:'—',ntp:2026,cod:2028,type:'PV',pv:200,ess:0,state:'WI',iso:'MISO',blm:false},
+{id:'q08',portfolio:'Q-cells',name:'Blacks Creek',cat:'—',ntp:2027,cod:2028,type:'PV+ESS',pv:400,ess:200,state:'ID',iso:'Non-ISO',blm:false},
+{id:'q09',portfolio:'Q-cells',name:'Turkey Creek',cat:'—',ntp:2027,cod:2028,type:'PV',pv:200,ess:0,state:'CO',iso:'WECC',blm:false},
+];
+
+const STATE_COORDS = {
+  AL:[32.8,-86.8],AK:[64.2,-153.4],AZ:[34.3,-111.1],AR:[34.8,-92.2],CA:[37.2,-119.5],
+  CO:[39.0,-105.5],CT:[41.6,-72.7],DE:[39.0,-75.5],FL:[28.1,-81.6],GA:[32.7,-83.4],
+  HI:[20.0,-157.0],ID:[44.3,-114.5],IL:[40.0,-89.2],IN:[40.3,-86.1],IA:[42.0,-93.2],
+  KS:[38.5,-98.4],KY:[37.5,-85.3],LA:[31.1,-91.8],ME:[45.4,-69.0],MD:[39.0,-76.8],
+  MA:[42.3,-71.8],MI:[44.3,-85.4],MN:[46.3,-94.3],MS:[32.7,-89.7],MO:[38.5,-92.5],
+  MT:[47.0,-110.0],NE:[41.5,-99.9],NV:[38.5,-117.1],NH:[43.7,-71.6],NJ:[40.1,-74.5],
+  NM:[34.5,-106.2],NY:[42.9,-75.6],NC:[35.5,-79.4],ND:[47.5,-100.5],OH:[40.4,-82.8],
+  OK:[35.6,-97.5],OR:[44.1,-120.5],PA:[41.2,-77.2],RI:[41.7,-71.5],SC:[33.9,-81.0],
+  SD:[44.4,-100.3],TN:[35.9,-86.7],TX:[31.1,-97.6],UT:[39.3,-111.1],VT:[44.1,-72.7],
+  VA:[37.8,-79.5],WA:[47.4,-120.5],WV:[38.6,-80.6],WI:[44.3,-89.8],WY:[43.0,-107.6]
+};
+
+const PORTFOLIO_COLORS = {HWR:'#4A90E2','Q-cells':'#FBBF24'};
+const CAT_COLORS = {A:'#F59E0B',B:'#4A90E2',C:'#A78BFA',D:'#34D399','—':'#9B99A8'};
+
+// ─── LOCAL STORAGE ────────────────────────────────────────────
+function loadProjectData(id) {
+  try { return JSON.parse(localStorage.getItem('proj_'+id)||'{}'); } catch(e){return {};}
+}
+function saveProjectData(id, data) {
+  const existing = loadProjectData(id);
+  localStorage.setItem('proj_'+id, JSON.stringify({...existing,...data}));
+}
+
+// ─── IRR SOLVER ───────────────────────────────────────────────
+function npv(rate, cfs) {
+  return cfs.reduce((acc,cf,t) => acc + cf/Math.pow(1+rate,t), 0);
+}
+function irr(cfs) {
+  let lo=-0.999, hi=10;
+  if(npv(lo,cfs)*npv(hi,cfs)>0) return null;
+  for(let i=0;i<1000;i++){
+    const mid=(lo+hi)/2;
+    if(Math.abs(hi-lo)<1e-8) return mid;
+    if(npv(lo,cfs)*npv(mid,cfs)<0) hi=mid; else lo=mid;
+  }
+  return (lo+hi)/2;
+}
+function calcFinancials(params) {
+  const {capex,opex,pvMW,essMW,cf,ppaPrice,ppaPct,merchantPrice,life,debtRatio,debtRate,debtTerm,opexEsc} = params;
+  const annualEnergy = pvMW * (cf/100) * 8760 / 1000; // GWh
+  const annualRevPV = annualEnergy * 1000 * (ppaPct/100 * ppaPrice + (1-ppaPct/100) * merchantPrice) / 1e6; // $M
+  const annualRevESS = essMW * 365 * 4 * (merchantPrice * 0.8) / 1e6; // rough ESS revenue $M
+  
+  const pirCFs = [-capex];
+  const debtAmt = capex * debtRatio/100;
+  const equityAmt = capex * (1-debtRatio/100);
+  const debtService = debtAmt * (debtRate/100 * Math.pow(1+debtRate/100,debtTerm)) / (Math.pow(1+debtRate/100,debtTerm)-1);
+  const eirCFs = [-equityAmt];
+
+  for(let yr=1; yr<=life; yr++){
+    const rev = (annualRevPV + annualRevESS) * Math.pow(0.995, yr-1); // 0.5% degradation
+    const op = opex * Math.pow(1+opexEsc/100, yr-1);
+    const ebitda = rev - op;
+    pirCFs.push(ebitda);
+    const ds = yr <= debtTerm ? debtService : 0;
+    eirCFs.push(ebitda - ds);
+  }
+
+  const pIRR = irr(pirCFs);
+  const eIRR = irr(eirCFs);
+  const avgRev = (annualRevPV+annualRevESS);
+  const avgOp = opex;
+  const avgDS = debtService * Math.min(debtTerm, life) / life;
+  const margin = avgRev>0 ? (avgRev-avgOp-avgDS)/avgRev*100 : 0;
+  
+  return {
+    pIRR: pIRR ? (pIRR*100).toFixed(2) : 'N/A',
+    eIRR: eIRR ? (eIRR*100).toFixed(2) : 'N/A',
+    margin: margin.toFixed(1),
+    annualRev: (annualRevPV+annualRevESS).toFixed(2),
+    ebitda: (annualRevPV+annualRevESS-opex).toFixed(2),
+    cashflows: pirCFs.slice(0, Math.min(6, pirCFs.length)),
+  };
+}
+
+// ─── APP STATE ────────────────────────────────────────────────
+let state = {
+  selectedProject: null,
+  activeTab: 'overview',
+  portfolioFilter: 'all',
+  isoFilter: 'all',
+  search: '',
+  alertPanelOpen: false,
+  addingBudget: false,
+  addingMilestone: false,
+  addingDoc: false,
+};
+
+// ─── FILTERED PROJECTS ────────────────────────────────────────
+function getFiltered() {
+  const q = state.search.toLowerCase();
+  return PROJECTS.filter(p => {
+    if(state.portfolioFilter!=='all' && p.portfolio!==state.portfolioFilter) return false;
+    if(state.isoFilter!=='all' && p.iso!==state.isoFilter) return false;
+    if(q && !p.name.toLowerCase().includes(q) && !p.state.toLowerCase().includes(q) &&
+       !p.iso.toLowerCase().includes(q) && !p.portfolio.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+// ─── MAP ──────────────────────────────────────────────────────
+let projection, path, svg, g, zoom;
+
+function initMap() {
+  const container = document.getElementById('map-container');
+  const w = container.clientWidth, h = container.clientHeight;
+  
+  svg = d3.select('#map-svg').attr('width',w).attr('height',h);
+  
+  projection = d3.geoAlbersUsa().scale(w*1.1).translate([w/2, h/2]);
+  path = d3.geoPath().projection(projection);
+  
+  zoom = d3.zoom().scaleExtent([0.8,8]).on('zoom', e => {
+    g.attr('transform', e.transform);
+  });
+  svg.call(zoom);
+  
+  g = svg.append('g');
+  
+  const mapUrls = [
+    'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json',
+    'https://unpkg.com/us-atlas@3/states-10m.json',
+  ];
+  
+  function tryFetch(urls, idx=0){
+    if(idx>=urls.length){ renderFallbackMap(); return; }
+    fetch(urls[idx])
+      .then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); })
+      .then(us=>{
+        const states = topojson.feature(us, us.objects.states);
+        g.selectAll('.state-path').data(states.features).enter()
+          .append('path').attr('class','state-path').attr('d',path);
+        const stateNames={'01':'AL','02':'AK','04':'AZ','05':'AR','06':'CA','08':'CO','09':'CT',
+          '10':'DE','12':'FL','13':'GA','15':'HI','16':'ID','17':'IL','18':'IN','19':'IA',
+          '20':'KS','21':'KY','22':'LA','23':'ME','24':'MD','25':'MA','26':'MI','27':'MN',
+          '28':'MS','29':'MO','30':'MT','31':'NE','32':'NV','33':'NH','34':'NJ','35':'NM',
+          '36':'NY','37':'NC','38':'ND','39':'OH','40':'OK','41':'OR','42':'PA','44':'RI',
+          '45':'SC','46':'SD','47':'TN','48':'TX','49':'UT','50':'VT','51':'VA','53':'WA',
+          '54':'WV','55':'WI','56':'WY'};
+        states.features.forEach(f=>{
+          const abbr=stateNames[String(f.id).padStart(2,'0')]; if(!abbr)return;
+          const c=path.centroid(f); if(!c||isNaN(c[0]))return;
+          g.append('text').attr('class','state-label').attr('x',c[0]).attr('y',c[1])
+            .attr('text-anchor','middle').attr('dy','.3em').text(abbr);
+        });
+        plotProjects();
+      })
+      .catch(()=>tryFetch(urls, idx+1));
+  }
+  
+  function renderFallbackMap(){
+    // 폴백: 주 위치에 배경 사각형 + 레이블 직접 그리기
+    const usOutline=[[[-125,49],[-66,49],[-66,25],[-125,25],[-125,49]]];
+    const usFeature={type:'Feature',geometry:{type:'Polygon',coordinates:usOutline}};
+    g.append('path').datum(usFeature).attr('class','state-path').attr('d',path);
+    // 주요 주 레이블
+    Object.entries(STATE_COORDS).forEach(([abbr,[lat,lng]])=>{
+      const pt=projection([lng,lat]); if(!pt||isNaN(pt[0]))return;
+      g.append('text').attr('class','state-label').attr('x',pt[0]).attr('y',pt[1])
+        .attr('text-anchor','middle').attr('dy','.3em').text(abbr).attr('font-size','9px');
+    });
+    plotProjects();
+  }
+  
+  tryFetch(mapUrls);
+  
+  document.getElementById('zoom-in').onclick=()=>svg.transition().call(zoom.scaleBy,1.5);
+  document.getElementById('zoom-out').onclick=()=>svg.transition().call(zoom.scaleBy,0.7);
+  document.getElementById('zoom-reset').onclick=()=>svg.transition().call(zoom.transform,d3.zoomIdentity);
+}
+
+function plotProjects() {
+  g.selectAll('.proj-marker').remove();
+  const filtered = getFiltered();
+  
+  // Group by state+portfolio for jitter
+  const stateCount = {};
+  filtered.forEach(p=>{
+    const key=p.state+p.portfolio;
+    stateCount[key] = (stateCount[key]||0)+1;
+  });
+  const stateIdx = {};
+  
+  filtered.forEach(p=>{
+    if(!STATE_COORDS[p.state]) return;
+    const [lat,lng] = STATE_COORDS[p.state];
+    const coords = projection([lng,lat]);
+    if(!coords||isNaN(coords[0])) return;
+    
+    const key=p.state+p.portfolio;
+    stateIdx[key] = (stateIdx[key]||0);
+    const idx = stateIdx[key]++;
+    const total = stateCount[key];
+    // spiral jitter
+    const angle = idx * 2.4; const rad = idx===0 ? 0 : 6+idx*1.5;
+    const x = coords[0] + Math.cos(angle)*rad;
+    const y = coords[1] + Math.sin(angle)*rad;
+    
+    const r = Math.max(4, Math.min(10, Math.sqrt((p.pv+p.ess)/100)*2));
+    const col = PORTFOLIO_COLORS[p.portfolio]||'#888';
+    const isSelected = state.selectedProject?.id === p.id;
+    
+    const grp = g.append('g').attr('class','proj-marker'+(isSelected?' selected':'')).attr('data-id',p.id);
+    
+    grp.append('circle')
+      .attr('cx',x).attr('cy',y).attr('r',r)
+      .attr('fill',col).attr('fill-opacity',0.85)
+      .attr('stroke',isSelected?'#fff':p.type.includes('ESS')?'rgba(255,255,255,0.6)':'none')
+      .attr('stroke-width',isSelected?2:1);
+    
+    if(isSelected){
+      grp.append('circle').attr('cx',x).attr('cy',y).attr('r',r+4)
+        .attr('fill','none').attr('stroke',col).attr('stroke-width',1.5).attr('opacity',0.5);
+    }
+    
+    grp.on('mouseenter', function(event){
+      const tt = document.getElementById('map-tooltip');
+      const cap = document.getElementById('map-container');
+      const rect = cap.getBoundingClientRect();
+      const mx = event.clientX-rect.left, my = event.clientY-rect.top;
+      tt.style.display='block';
+      tt.style.left=(mx+12)+'px'; tt.style.top=(my-10)+'px';
+      const total = p.pv+p.ess;
+      tt.innerHTML=`
+        <div style="font-weight:700;margin-bottom:4px">${p.name}</div>
+        <div style="font-size:11px;color:#9B99A8">${p.portfolio} · ${p.state} · ${p.iso}</div>
+        <div style="font-size:11px;margin-top:4px;color:#F0EFF4">${p.type} · ${total} MWac</div>
+        <div style="font-size:11px;color:#9B99A8">COD: ${p.cod} · S/H: ${p.cat}</div>
+      `;
+    })
+    .on('mouseleave', ()=>document.getElementById('map-tooltip').style.display='none')
+    .on('click', ()=>selectProject(p));
+  });
+}
+
+// ─── PROJECT LIST SIDEBAR ─────────────────────────────────────
+// ─── 그룹 정의 ────────────────────────────────────
+const DIVEST_26 = new Set([
+  'Boulder Solar 3','Bonanza Peak','Oberon 2','Oberon 3','Oberon 4',
+  'Taormina','Lavender','Gibson'
+]);
+const DIVEST_PROB = {
+  'Boulder Solar 3':'H','Bonanza Peak':'M','Oberon 2':'M','Oberon 3':'M',
+  'Oberon 4':'M','Taormina':'M','Lavender':'M','Gibson':'L'
+};
+const SH_A = new Set([
+  'Borden','Keystone','Harlem River','Twinkle','Black Star','Florence'
+]);
+const SH_B = new Set([
+  'Grandview','Stone Fruit','Midfield','Neptune','Appaloosa 2',
+  'Martha Fields','Cedar Ridge','Barkley Creek','Greasewood',
+  'Intermountain','Prairie Ridge'
+]);
+const PROB_STYLE = {
+  H:'background:rgba(52,211,153,.2);color:#34D399',
+  M:'background:rgba(251,191,36,.2);color:#FBBF24',
+  L:'background:rgba(248,113,113,.2);color:#F87171'
+};
+
+function getGroup(p) {
+  if (DIVEST_26.has(p.name)) return 'divest';
+  if (SH_A.has(p.name) || SH_B.has(p.name)) return 'sh';
+  return 'other';
+}
+
+function renderSidebar() {
+  const filtered = getFiltered();
+  document.getElementById('proj-count').textContent = filtered.length;
+  const list = document.getElementById('proj-list');
+  list.innerHTML = '';
+
+  // 그룹 분류
+  const gDivest = filtered.filter(p => getGroup(p) === 'divest')
+    .sort((a,b) => {
+      const po = {H:0,M:1,L:2};
+      return (po[DIVEST_PROB[a.name]]??9) - (po[DIVEST_PROB[b.name]]??9) || a.name.localeCompare(b.name);
+    });
+  const gSH = filtered.filter(p => getGroup(p) === 'sh')
+    .sort((a,b) => {
+      const so = (p) => SH_A.has(p.name) ? 0 : 1;
+      return so(a) - so(b) || a.cod - b.cod || a.name.localeCompare(b.name);
+    });
+  const gOther = filtered.filter(p => getGroup(p) === 'other')
+    .sort((a,b) => {
+      const co = {A:0,B:1,C:2,D:3,'—':4};
+      return (co[a.cat]??4) - (co[b.cat]??4) || a.cod - b.cod || a.name.localeCompare(b.name);
+    });
+
+  // 그룹 접힘 상태 (기본: 모두 펼침)
+  const collapsed = state.groupCollapsed || (state.groupCollapsed = {});
+
+  function addGroup(key, label, icon, projects, badgeFn) {
+    if (!projects.length) return;
+    const isOpen = collapsed[key] !== true;
+
+    // 그룹 헤더
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'padding:8px 10px 6px;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;margin-top:4px';
+    hdr.innerHTML = `
+      <span style="display:flex;align-items:center;gap:5px">
+        <span class="grp-arrow" style="font-size:13px;display:inline-block;transform:rotate(${isOpen?'90':'0'}deg);transition:transform .2s"">›</span>
+        ${icon} ${label}
+      </span>
+      <span style="background:var(--surface2);padding:1px 6px;border-radius:20px;font-size:10px;color:var(--t3)">${projects.length}</span>
+    `;
+    hdr.onmouseenter = () => hdr.style.background = 'var(--surface2)';
+    hdr.onmouseleave = () => hdr.style.background = '';
+
+    // 아이템 컨테이너
+    const container = document.createElement('div');
+    container.style.cssText = `overflow:hidden;transition:max-height .25s ease;`;
+    container.style.maxHeight = isOpen ? '9999px' : '0';
+
+    projects.forEach(p => {
+      const col = PORTFOLIO_COLORS[p.portfolio] || '#888';
+      const item = document.createElement('div');
+      item.className = 'proj-item' + (state.selectedProject?.id === p.id ? ' active' : '');
+      item.innerHTML = `
+        <div class="proj-dot" style="background:${col}"></div>
+        <div class="proj-info">
+          <div class="proj-name">${p.name}</div>
+          <div class="proj-meta">${p.state} · ${p.iso} · COD ${p.cod}</div>
+        </div>
+        ${badgeFn(p)}
+      `;
+      item.onclick = () => selectProject(p);
+      container.appendChild(item);
+    });
+
+    // 토글
+    hdr.onclick = () => {
+      const willOpen = collapsed[key] === true;
+      collapsed[key] = willOpen ? false : true;
+      container.style.maxHeight = willOpen ? '9999px' : '0';
+      hdr.querySelector('.grp-arrow').style.transform = willOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+    };
+
+    list.appendChild(hdr);
+    list.appendChild(container);
+  }
+
+  addGroup('divest', LANG[currentLang].divest, '💰', gDivest, p => {
+    const prob = DIVEST_PROB[p.name];
+    return prob ? `<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:20px;${PROB_STYLE[prob]}">${prob}</span>` : '';
+  });
+
+  addGroup('sh', LANG[currentLang].sh, '🏆', gSH, p => {
+    const cls = SH_A.has(p.name) ? 'Class A' : 'Class B';
+    const col = SH_A.has(p.name) ? 'background:rgba(74,144,226,.15);color:#4A90E2' : 'background:rgba(167,139,250,.15);color:#A78BFA';
+    return `<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:20px;${col}">${cls}</span>`;
+  });
+
+  addGroup('other', LANG[currentLang].other, '📁', gOther, () => '');
+}
+
+function renderStats() {
+  const filtered = getFiltered();
+  const totalPV = filtered.reduce((a,p)=>a+p.pv,0);
+  const totalESS = filtered.reduce((a,p)=>a+p.ess,0);
+  document.getElementById('stat-total').textContent = filtered.length;
+  document.getElementById('stat-pv').textContent = totalPV.toLocaleString();
+  document.getElementById('stat-ess').textContent = totalESS.toLocaleString();
+}
+
+// ─── SELECT PROJECT ───────────────────────────────────────────
+function selectProject(p) {
+  state.selectedProject = p;
+  state.activeTab = 'overview';
+  document.getElementById('detail-panel').classList.add('open');
+  renderSidebar();
+  plotProjects();
+  renderDetailPanel();
+}
+
+// ─── DETAIL PANEL ─────────────────────────────────────────────
+function renderDetailPanel() {
+  const p = state.selectedProject;
+  if(!p) return;
+  const pd = loadProjectData(p.id);
+  const col = PORTFOLIO_COLORS[p.portfolio]||'#888';
+  
+  const panel = document.getElementById('detail-panel');
+  panel.innerHTML=`
+    <div class="dp-header">
+      <button class="dp-close" id="dp-close">✕</button>
+      <div class="dp-portfolio" style="color:${col}">${p.portfolio}</div>
+      <div class="dp-name">${p.name}</div>
+      <div class="dp-chips">
+        <span class="dp-chip">${p.state}</span>
+        <span class="dp-chip">${p.iso}</span>
+        <span class="dp-chip cat-${p.cat}">${p.cat}등급</span>
+        <span class="dp-chip">${p.type}</span>
+        <span class="dp-chip">COD ${p.cod}</span>
+        ${p.blm?'<span class="dp-chip" style="color:#FBBF24">BLM</span>':''}
+      </div>
+    </div>
+    <div class="dp-tabs" id="dp-tabs">
+      <button class="dp-tab${state.activeTab==='overview'?' active':''}" data-tab="overview">📋 개요</button>
+      <button class="dp-tab${state.activeTab==='financial'?' active':''}" data-tab="financial">📈 재무모델</button>
+      <button class="dp-tab${state.activeTab==='budget'?' active':''}" data-tab="budget">💰 예산</button>
+      <button class="dp-tab${state.activeTab==='docs'?' active':''}" data-tab="docs">📁 품의</button>
+      <button class="dp-tab${state.activeTab==='schedule'?' active':''}" data-tab="schedule">📅 일정</button>
+    </div>
+    <div class="dp-body" id="dp-body"></div>
+  `;
+  
+  document.getElementById('dp-close').onclick=()=>{
+    document.getElementById('detail-panel').classList.remove('open');
+    state.selectedProject=null;
+    renderSidebar(); plotProjects();
+  };
+  document.querySelectorAll('.dp-tab').forEach(btn=>{
+    btn.onclick=()=>{ state.activeTab=btn.dataset.tab; renderDetailPanel(); };
+  });
+  
+  renderTab();
+}
+
+function renderTab() {
+  const body = document.getElementById('dp-body');
+  if(!body) return;
+  const p = state.selectedProject;
+  const pd = loadProjectData(p.id);
+  
+  if(state.activeTab==='overview') renderOverview(body,p,pd);
+  if(state.activeTab==='financial') renderFinancial(body,p,pd);
+  if(state.activeTab==='budget') renderBudget(body,p,pd);
+  if(state.activeTab==='docs') renderDocs(body,p,pd);
+  if(state.activeTab==='schedule') renderSchedule(body,p,pd);
+}
+
+// ─── OVERVIEW ────────────────────────────────────────────────
+function renderOverview(body,p,pd){
+  const total=p.pv+p.ess;
+  const capexEst = (p.pv*0.9 + p.ess*0.3).toFixed(0);
+  body.innerHTML=`
+    <div class="info-grid">
+      <div class="info-item"><div class="info-label">PV 용량</div><div class="info-value blue">${p.pv>0?p.pv+' MWac':'—'}</div></div>
+      <div class="info-item"><div class="info-label">ESS 용량</div><div class="info-value green">${p.ess>0?p.ess+' MW':'—'}</div></div>
+      <div class="info-item"><div class="info-label">NTP</div><div class="info-value">${p.ntp}</div></div>
+      <div class="info-item"><div class="info-label">COD</div><div class="info-value amber">${p.cod}</div></div>
+      <div class="info-item"><div class="info-label">ISO/Grid</div><div class="info-value">${p.iso}</div></div>
+      <div class="info-item"><div class="info-label">State</div><div class="info-value">${p.state}</div></div>
+      <div class="info-item"><div class="info-label">S/H Category</div><div class="info-value cat-${p.cat}">${p.cat}</div></div>
+      <div class="info-item"><div class="info-label">추정 CAPEX</div><div class="info-value">~$${capexEst}M</div></div>
+    </div>
+    <div class="section-title">사업 개요</div>
+    <div class="overview-desc" id="proj-desc" contenteditable="true">${pd.description||'사업 개요를 입력하세요...'}</div>
+    <div class="save-note">✏️ 클릭하여 편집 · 자동 저장</div>
+    
+    <div class="section-title">주요 연락처</div>
+    <div style="background:var(--surface2);border-radius:8px;padding:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-field"><label>Project Lead</label><input id="lead" placeholder="담당자" value="${pd.lead||''}"></div>
+        <div class="form-field"><label>Email</label><input id="email" type="email" placeholder="이메일" value="${pd.email||''}"></div>
+        <div class="form-field"><label>Developer</label><input id="developer" placeholder="개발사" value="${pd.developer||''}"></div>
+        <div class="form-field"><label>EPC</label><input id="epc" placeholder="EPC사" value="${pd.epc||''}"></div>
+      </div>
+      <button class="btn-save" style="margin-top:8px" id="save-overview">저장</button>
+    </div>
+  `;
+  
+  document.getElementById('proj-desc').oninput = function(){
+    saveProjectData(p.id,{description:this.textContent});
+  };
+  document.getElementById('save-overview').onclick=()=>{
+    saveProjectData(p.id,{
+      lead:document.getElementById('lead').value,
+      email:document.getElementById('email').value,
+      developer:document.getElementById('developer').value,
+      epc:document.getElementById('epc').value,
+    });
+    showSaveToast();
+  };
+}
+
+// ─── FINANCIAL MODEL ─────────────────────────────────────────
+function renderFinancial(body,p,pd){
+  const fd = pd.financial||{};
+  const capexDef = (p.pv*0.9 + p.ess*0.3).toFixed(0);
+  
+  body.innerHTML=`
+    <div class="fin-section">
+      <div class="fin-section-title">투자 & 비용</div>
+      <div class="fin-grid">
+        <div class="fin-field"><label>CAPEX ($M)</label><input id="f-capex" type="number" value="${fd.capex||capexDef}" placeholder="총 투자비"></div>
+        <div class="fin-field"><label>OPEX ($M/yr)</label><input id="f-opex" type="number" value="${fd.opex||((p.pv+p.ess)*0.01).toFixed(2)}" placeholder="연간 운영비"></div>
+        <div class="fin-field"><label>OPEX 상승률 (%)</label><input id="f-opexesc" type="number" value="${fd.opexesc||2}" placeholder="2"></div>
+        <div class="fin-field"><label>사업 기간 (년)</label><input id="f-life" type="number" value="${fd.life||25}" placeholder="25"></div>
+      </div>
+    </div>
+    <div class="fin-section">
+      <div class="fin-section-title">수익 구조</div>
+      <div class="fin-grid">
+        <div class="fin-field"><label>설비이용률 (%)</label><input id="f-cf" type="number" value="${fd.cf||25}" placeholder="25"></div>
+        <div class="fin-field"><label>PPA 가격 ($/MWh)</label><input id="f-ppa" type="number" value="${fd.ppa||55}" placeholder="55"></div>
+        <div class="fin-field"><label>PPA 비율 (%)</label><input id="f-ppapct" type="number" value="${fd.ppapct||70}" placeholder="70"></div>
+        <div class="fin-field"><label>Merchant ($/MWh)</label><input id="f-merchant" type="number" value="${fd.merchant||45}" placeholder="45"></div>
+      </div>
+    </div>
+    <div class="fin-section">
+      <div class="fin-section-title">금융 구조</div>
+      <div class="fin-grid">
+        <div class="fin-field"><label>부채 비율 (%)</label><input id="f-debt" type="number" value="${fd.debt||70}" placeholder="70"></div>
+        <div class="fin-field"><label>금리 (%)</label><input id="f-rate" type="number" value="${fd.rate||5.5}" placeholder="5.5"></div>
+        <div class="fin-field"><label>대출 기간 (년)</label><input id="f-dterm" type="number" value="${fd.dterm||18}" placeholder="18"></div>
+      </div>
+    </div>
+    <button class="fin-calc-btn" id="calc-btn">📊 IRR / 수익성 계산</button>
+    <div id="fin-results" style="margin-top:10px"></div>
+  `;
+  
+  document.getElementById('calc-btn').onclick=()=>{
+    const params={
+      capex: +document.getElementById('f-capex').value||100,
+      opex:  +document.getElementById('f-opex').value||2,
+      pvMW:  p.pv, essMW: p.ess,
+      cf:    +document.getElementById('f-cf').value||25,
+      ppaPrice:  +document.getElementById('f-ppa').value||55,
+      ppaPct:    +document.getElementById('f-ppapct').value||70,
+      merchantPrice: +document.getElementById('f-merchant').value||45,
+      life:  +document.getElementById('f-life').value||25,
+      debtRatio: +document.getElementById('f-debt').value||70,
+      debtRate:  +document.getElementById('f-rate').value||5.5,
+      debtTerm:  +document.getElementById('f-dterm').value||18,
+      opexEsc:   +document.getElementById('f-opexesc').value||2,
+    };
+    saveProjectData(p.id,{financial:{
+      capex:params.capex,opex:params.opex,cf:params.cf,ppa:params.ppaPrice,
+      ppapct:params.ppaPct,merchant:params.merchantPrice,life:params.life,
+      debt:params.debtRatio,rate:params.debtRate,dterm:params.debtTerm,opexesc:params.opexEsc
+    }});
+    const res = calcFinancials(params);
+    const pirr=parseFloat(res.pIRR), eirr=parseFloat(res.eIRR), margin=parseFloat(res.margin);
+    const pirrClass = pirr>=8?'good':pirr>=5?'ok':'bad';
+    const eirrClass = eirr>=12?'good':eirr>=8?'ok':'bad';
+    const marginClass = margin>=20?'good':margin>=10?'ok':'bad';
+    
+    document.getElementById('fin-results').innerHTML=`
+      <div class="fin-results">
+        <div class="fin-results-title">📊 계산 결과</div>
+        <div class="fin-result-grid">
+          <div class="fin-result-item">
+            <div class="fin-result-label">PIRR</div>
+            <div class="fin-result-val ${pirrClass}">${res.pIRR}%</div>
+          </div>
+          <div class="fin-result-item">
+            <div class="fin-result-label">EIRR</div>
+            <div class="fin-result-val ${eirrClass}">${res.eIRR}%</div>
+          </div>
+          <div class="fin-result-item">
+            <div class="fin-result-label">Margin</div>
+            <div class="fin-result-val ${marginClass}">${res.margin}%</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--t3);display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+          <div>연간 매출: <strong style="color:var(--t1)">$${res.annualRev}M</strong></div>
+          <div>연간 EBITDA: <strong style="color:var(--green)">$${res.ebitda}M</strong></div>
+        </div>
+        <table class="cashflow-table">
+          <tr><th>연도</th><th>현금흐름 ($M)</th></tr>
+          ${res.cashflows.map((cf,i)=>`<tr><td>${i===0?'Y0 (투자)':'Y'+i}</td><td class="${cf>=0?'cf-pos':'cf-neg'}">${cf>=0?'+':''}${cf.toFixed(2)}</td></tr>`).join('')}
+          <tr><td style="color:var(--t3)">... Y${params.life}</td><td style="color:var(--t3)">산출됨</td></tr>
+        </table>
+      </div>
+    `;
+  };
+}
+
+// ─── BUDGET ──────────────────────────────────────────────────
+function renderBudget(body,p,pd){
+  const budgets = pd.budgets||[
+    {id:'b1',name:'CAPEX - EPC',budget:0,actual:0},
+    {id:'b2',name:'CAPEX - 장비',budget:0,actual:0},
+    {id:'b3',name:'개발비',budget:0,actual:0},
+    {id:'b4',name:'금융비용',budget:0,actual:0},
+  ];
+  const totalBudget = budgets.reduce((a,b)=>a+b.budget,0);
+  const totalActual = budgets.reduce((a,b)=>a+b.actual,0);
+  const pct = totalBudget>0?Math.round(totalActual/totalBudget*100):0;
+  
+  body.innerHTML=`
+    <div class="budget-summary">
+      <div class="budget-card"><div class="budget-card-label">총 예산</div><div class="budget-card-val blue">$${totalBudget.toFixed(1)}M</div></div>
+      <div class="budget-card"><div class="budget-card-label">집행</div><div class="budget-card-val ${pct>100?'red':''}" style="color:${pct>100?'var(--red)':'var(--green)'}">$${totalActual.toFixed(1)}M</div></div>
+      <div class="budget-card"><div class="budget-card-label">잔여</div><div class="budget-card-val">${pct}% 집행</div></div>
+    </div>
+    <div class="budget-progress">
+      <div class="bp-label"><span>집행률</span><span>${pct}%</span></div>
+      <div class="bp-bar"><div class="bp-fill ${pct>100?'over':''}" style="width:${Math.min(pct,100)}%"></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 80px 80px 60px;gap:4px;padding:6px 10px;font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;">
+      <span>항목</span><span style="text-align:right">예산($M)</span><span style="text-align:right">집행($M)</span><span style="text-align:right">비율</span>
+    </div>
+    <div class="budget-list" id="budget-list">
+      ${budgets.map(b=>{
+        const bpct=b.budget>0?Math.round(b.actual/b.budget*100):0;
+        return `<div class="budget-item">
+          <span class="budget-item-name">${b.name}</span>
+          <input class="budget-item-val" type="number" value="${b.budget}" data-id="${b.id}" data-field="budget" style="width:75px;padding:3px 6px;text-align:right;font-size:11px">
+          <input class="budget-item-actual" type="number" value="${b.actual}" data-id="${b.id}" data-field="actual" style="width:75px;padding:3px 6px;text-align:right;font-size:11px;color:${b.actual>b.budget&&b.budget>0?'var(--red)':'var(--green)'}">
+          <span class="budget-item-pct" style="color:${bpct>100?'var(--red)':bpct>80?'var(--amber)':'var(--t2)'}">${bpct}%</span>
+        </div>`;
+      }).join('')}
+    </div>
+    ${state.addingBudget?`
+    <div class="mini-modal" style="margin-top:8px">
+      <div class="mini-modal-title">예산 항목 추가</div>
+      <div class="form-row">
+        <div class="form-field" style="grid-column:1/-1"><label>항목명</label><input id="nb-name" placeholder="예산 항목명"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>예산 ($M)</label><input id="nb-budget" type="number" placeholder="0"></div>
+        <div class="form-field"><label>집행 ($M)</label><input id="nb-actual" type="number" placeholder="0"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-cancel" id="cancel-budget">취소</button>
+        <button class="btn-save" id="save-budget">추가</button>
+      </div>
+    </div>`:''}
+    <button class="add-btn" id="add-budget-btn">+ 예산 항목 추가</button>
+    <button class="btn-save" style="width:100%;margin-top:8px" id="save-budgets-btn">저장</button>
+  `;
+  
+  document.getElementById('add-budget-btn').onclick=()=>{state.addingBudget=true;renderTab();};
+  if(state.addingBudget){
+    document.getElementById('cancel-budget').onclick=()=>{state.addingBudget=false;renderTab();};
+    document.getElementById('save-budget').onclick=()=>{
+      const nm=document.getElementById('nb-name').value.trim();if(!nm)return;
+      budgets.push({id:'b'+Date.now(),name:nm,budget:+document.getElementById('nb-budget').value||0,actual:+document.getElementById('nb-actual').value||0});
+      saveProjectData(p.id,{budgets});state.addingBudget=false;renderTab();
+    };
+  }
+  document.getElementById('save-budgets-btn').onclick=()=>{
+    document.querySelectorAll('.budget-item input').forEach(inp=>{
+      const b=budgets.find(x=>x.id===inp.dataset.id);
+      if(b) b[inp.dataset.field]=+inp.value||0;
+    });
+    saveProjectData(p.id,{budgets});showSaveToast();renderTab();
+  };
+}
+
+// ─── DOCUMENTS ───────────────────────────────────────────────
+function renderDocs(body,p,pd){
+  const docs = pd.docs||[];
+  const cats=['전체','품의서','계약서','보고서','도면','기타'];
+  const activeCat = state.docCat||'전체';
+  const filtered = activeCat==='전체'?docs:docs.filter(d=>d.category===activeCat);
+  
+  body.innerHTML=`
+    <div class="doc-upload-zone" id="dz">
+      <input type="file" id="doc-file" style="display:none" multiple>
+      <div class="duz-icon">📁</div>
+      <div class="duz-text">파일 드래그 또는 <span class="duz-link" id="doc-trigger">클릭하여 업로드</span></div>
+      <div class="duz-hint">모든 파일 형식 · 최대 10MB</div>
+    </div>
+    ${state.addingDoc?`
+    <div class="mini-modal">
+      <div class="mini-modal-title">파일 정보 입력</div>
+      <div class="form-row">
+        <div class="form-field"><label>카테고리</label><select id="doc-cat">
+          ${['품의서','계약서','보고서','도면','기타'].map(c=>`<option>${c}</option>`).join('')}
+        </select></div>
+        <div class="form-field"><label>메모</label><input id="doc-memo" placeholder="파일 설명"></div>
+      </div>
+      <div id="doc-preview" style="font-size:12px;color:var(--t2);margin-bottom:8px"></div>
+      <div class="form-actions">
+        <button class="btn-cancel" id="cancel-doc">취소</button>
+        <button class="btn-save" id="save-doc">업로드</button>
+      </div>
+    </div>`:''}
+    <div class="doc-category-filter">
+      ${cats.map(c=>`<button class="doc-cat-btn${activeCat===c?' active':''}" data-cat="${c}">${c}</button>`).join('')}
+    </div>
+    <div class="doc-list">
+      ${filtered.length===0?`<div style="text-align:center;padding:24px;color:var(--t3);font-size:13px">문서가 없습니다</div>`:''}
+      ${filtered.map(d=>`
+        <div class="doc-item">
+          <div class="doc-icon">${docIcon(d.mime)}</div>
+          <div class="doc-info">
+            <div class="doc-name">${d.name}</div>
+            <div class="doc-meta">
+              <span class="doc-category-badge">${d.category}</span>
+              ${d.uploader} · ${d.date}${d.memo?' · '+d.memo:''}
+            </div>
+          </div>
+          <div class="doc-actions">
+            ${d.data?`<a class="doc-btn" href="${d.data}" download="${d.name}">⬇</a>`:''}
+            <button class="doc-btn" data-del="${d.id}">✕</button>
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+  
+  document.getElementById('doc-trigger').onclick=()=>document.getElementById('doc-file').click();
+  const dz=document.getElementById('dz');
+  dz.ondragover=e=>{e.preventDefault();dz.classList.add('dz-over')};
+  dz.ondragleave=()=>dz.classList.remove('dz-over');
+  dz.ondrop=e=>{e.preventDefault();dz.classList.remove('dz-over');handleDocFiles(e.dataTransfer.files,p,pd,docs);};
+  document.getElementById('doc-file').onchange=e=>handleDocFiles(e.target.files,p,pd,docs);
+  
+  document.querySelectorAll('.doc-cat-btn').forEach(btn=>{
+    btn.onclick=()=>{state.docCat=btn.dataset.cat;renderTab();};
+  });
+  document.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick=()=>{
+      const newDocs=docs.filter(d=>d.id!==btn.dataset.del);
+      saveProjectData(p.id,{docs:newDocs});renderTab();
+    };
+  });
+  
+  if(state.addingDoc){
+    document.getElementById('cancel-doc').onclick=()=>{state.addingDoc=false;state.pendingDocs=null;renderTab();};
+    document.getElementById('save-doc').onclick=()=>{
+      const cat=document.getElementById('doc-cat').value;
+      const memo=document.getElementById('doc-memo').value;
+      (state.pendingDocs||[]).forEach(f=>{
+        docs.push({...f,category:cat,memo,uploader:p.portfolio,date:new Date().toISOString().slice(0,10)});
+      });
+      saveProjectData(p.id,{docs});state.addingDoc=false;state.pendingDocs=null;renderTab();
+    };
+  }
+}
+
+function handleDocFiles(files,p,pd,docs){
+  const pending=[];
+  let loaded=0;
+  [...files].forEach(file=>{
+    if(file.size>10*1024*1024){alert(file.name+': 10MB 초과');return;}
+    const r=new FileReader();
+    r.onload=e=>{
+      pending.push({id:'d'+Date.now()+Math.random(),name:file.name,mime:file.type,size:file.size,data:e.target.result});
+      loaded++;
+      if(loaded===files.length){
+        state.pendingDocs=pending;state.addingDoc=true;renderTab();
+        const prev=document.getElementById('doc-preview');
+        if(prev) prev.textContent=pending.map(f=>f.name).join(', ');
+      }
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+function docIcon(mime){
+  if(!mime)return'📄';
+  if(mime.includes('pdf'))return'📑';
+  if(mime.includes('word')||mime.includes('document'))return'📝';
+  if(mime.includes('sheet')||mime.includes('excel'))return'📊';
+  if(mime.includes('presentation')||mime.includes('powerpoint'))return'📋';
+  if(mime.startsWith('image'))return'🖼️';
+  return'📄';
+}
+
+// ─── SCHEDULE ────────────────────────────────────────────────
+function renderSchedule(body,p,pd){
+  const milestones = pd.milestones||getDefaultMilestones(p);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate()+1);
+  
+  const overdue = milestones.filter(m=>!m.done&&new Date(m.date)<today);
+  const todayMs = milestones.filter(m=>!m.done&&new Date(m.date).toDateString()===today.toDateString());
+  const soonMs  = milestones.filter(m=>!m.done&&new Date(m.date)>today&&(new Date(m.date)-today)<2*86400000);
+  
+  const alertMs = [...overdue,...todayMs,...soonMs];
+  
+  body.innerHTML=`
+    ${alertMs.length>0?`
+    <div class="schedule-alert-banner">
+      <div class="sab-title">⚠️ 주의 필요 (${alertMs.length}건)</div>
+      ${alertMs.map(m=>{
+        const d=new Date(m.date); const diff=Math.round((d-today)/86400000);
+        const label=diff<0?`${Math.abs(diff)}일 초과`:diff===0?'오늘':'내일';
+        return `<div style="font-size:11px;color:var(--t2);margin-top:3px">• ${m.name} — <span style="color:${diff<0?'var(--red)':'var(--amber)'}">${label}</span> (${m.date})</div>`;
+      }).join('')}
+    </div>`:''}
+    
+    ${state.addingMilestone?`
+    <div class="mini-modal">
+      <div class="mini-modal-title">일정 추가</div>
+      <div class="form-row">
+        <div class="form-field" style="grid-column:1/-1"><label>마일스톤명</label><input id="ms-name" placeholder="주요 일정"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>예정일</label><input type="date" id="ms-date"></div>
+        <div class="form-field"><label>담당자</label><input id="ms-owner" placeholder="담당자"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-cancel" id="cancel-ms">취소</button>
+        <button class="btn-save" id="save-ms">추가</button>
+      </div>
+    </div>`:''}
+    
+    <div class="milestone-list">
+      ${milestones.map(m=>{
+        const d=new Date(m.date); const diff=Math.round((d-today)/86400000);
+        const cls=m.done?'done':diff<0?'overdue':diff===0?'today':diff<=1?'upcoming':'';
+        const statusLabel=m.done?'완료':diff<0?`D+${Math.abs(diff)}`:diff===0?'오늘':diff<=1?'내일':`D-${diff}`;
+        const icon=m.done?'✅':diff<0?'🚨':diff===0?'🔥':diff<=3?'⚡':'📌';
+        return `<div class="milestone-item ${cls}">
+          <div class="ms-icon">${icon}</div>
+          <div class="ms-info">
+            <div class="ms-name">${m.name}</div>
+            <div class="ms-date">${m.date}${m.owner?' · '+m.owner:''}</div>
+          </div>
+          <span class="ms-status ${cls}">${statusLabel}</span>
+          <div class="ms-actions">
+            <button class="ms-toggle" data-id="${m.id}" data-done="${m.done}">${m.done?'되돌리기':'완료'}</button>
+            <button class="ms-toggle" data-del="${m.id}" style="color:var(--red)">✕</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="add-btn" id="add-ms-btn">+ 일정 추가</button>
+  `;
+  
+  document.getElementById('add-ms-btn').onclick=()=>{state.addingMilestone=true;renderTab();};
+  if(state.addingMilestone){
+    document.getElementById('cancel-ms').onclick=()=>{state.addingMilestone=false;renderTab();};
+    document.getElementById('save-ms').onclick=()=>{
+      const nm=document.getElementById('ms-name').value.trim();if(!nm)return;
+      milestones.push({id:'m'+Date.now(),name:nm,date:document.getElementById('ms-date').value,owner:document.getElementById('ms-owner').value,done:false});
+      milestones.sort((a,b)=>new Date(a.date)-new Date(b.date));
+      saveProjectData(p.id,{milestones});state.addingMilestone=false;renderTab();
+    };
+  }
+  document.querySelectorAll('[data-done]').forEach(btn=>{
+    btn.onclick=()=>{
+      const m=milestones.find(x=>x.id===btn.dataset.id);
+      if(m){m.done=btn.dataset.done==='false';saveProjectData(p.id,{milestones});renderTab();}
+    };
+  });
+  document.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick=()=>{
+      const newMs=milestones.filter(x=>x.id!==btn.dataset.del);
+      saveProjectData(p.id,{milestones:newMs});renderTab();
+    };
+  });
+}
+
+function getDefaultMilestones(p){
+  const cod=p.cod; const ntp=p.ntp;
+  return [
+    {id:'ms1',name:'NTP (Notice to Proceed)',date:`${ntp}-06-01`,owner:'PM',done:false},
+    {id:'ms2',name:'금융 클로징',date:`${ntp}-09-01`,owner:'Finance',done:false},
+    {id:'ms3',name:'착공',date:`${ntp}-10-01`,owner:'EPC',done:false},
+    {id:'ms4',name:'기계적 완공 (MC)',date:`${cod}-06-01`,owner:'EPC',done:false},
+    {id:'ms5',name:'COD (상업운전 개시)',date:`${cod}-09-01`,owner:'PM',done:false},
+    {id:'ms6',name:'PPA 계약 체결',date:`${ntp}-03-01`,owner:'Legal',done:false},
+  ].sort((a,b)=>new Date(a.date)-new Date(b.date));
+}
+
+// ─── ALERTS ──────────────────────────────────────────────────
+function checkAllAlerts(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const alerts = [];
+  PROJECTS.forEach(p=>{
+    const pd=loadProjectData(p.id);
+    const ms=pd.milestones||[];
+    ms.forEach(m=>{
+      if(m.done)return;
+      const d=new Date(m.date);d.setHours(0,0,0,0);
+      const diff=Math.round((d-today)/86400000);
+      if(diff<=1&&diff>=-7){
+        alerts.push({project:p,milestone:m,diff});
+      }
+    });
+  });
+  const dot=document.getElementById('alert-dot');
+  const list=document.getElementById('alert-list');
+  dot.style.display=alerts.length>0?'block':'none';
+  list.innerHTML=alerts.length===0?`<div style="padding:16px;text-align:center;color:var(--t3);font-size:13px">알림 없음</div>`:
+    alerts.map(a=>{
+      const label=a.diff<0?`${Math.abs(a.diff)}일 초과`:a.diff===0?'오늘 마감':'내일 마감';
+      const icon=a.diff<0?'🚨':a.diff===0?'🔥':'⚡';
+      return `<div class="alert-entry">
+        <div class="ae-icon">${icon}</div>
+        <div class="ae-info">
+          <div class="ae-title">${a.project.name} — ${a.milestone.name}</div>
+          <div class="ae-sub">${label} · ${a.milestone.date}</div>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function showSaveToast(){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:20px;right:20px;background:#1D9E75;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;z-index:9999;animation:fadeIn .2s';
+  t.textContent='✓ 저장되었습니다';
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2000);
+}
+
+// ─── INIT ────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
+  // Portfolio filter
+  document.querySelectorAll('.fchip').forEach(btn=>{
+    btn.onclick=()=>{
+      document.querySelectorAll('.fchip').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.portfolioFilter=btn.dataset.portfolio;
+      renderSidebar();renderStats();plotProjects();
+    };
+  });
+  
+  // Alert panel
+  document.getElementById('alert-btn').onclick=()=>{
+    state.alertPanelOpen=!state.alertPanelOpen;
+    document.getElementById('alert-panel').classList.toggle('open',state.alertPanelOpen);
+  };
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('#alert-btn')&&!e.target.closest('#alert-panel')){
+      document.getElementById('alert-panel').classList.remove('open');
+      state.alertPanelOpen=false;
+    }
+  });
+  
+  // 사이드바/stats는 D3 없이도 동작
+  renderSidebar();
+  renderStats();
+  checkAllAlerts();
+  
+  // D3 로딩 확인 후 지도 초기화
+  if(typeof d3 !== 'undefined') {
+    initMap();
+  } else {
+    // D3 없으면 지도 영역에 안내 메시지
+    const mc = document.getElementById('map-container');
+    if(mc) mc.innerHTML += '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#5C5A70;font-size:13px;text-align:center">지도 데이터 로딩 중...<br><span style="font-size:11px">네트워크 환경에 따라 지도가 표시되지 않을 수 있습니다</span></div>';
+    // D3 로딩 재시도 (2초 후)
+    setTimeout(()=>{ if(typeof d3 !== 'undefined') initMap(); }, 2000);
+  }
+  
+  if(Notification.permission==='default') Notification.requestPermission();
+  setInterval(checkAllAlerts, 60000);
+});
+
+window.addEventListener('resize',()=>{
+  if(svg){
+    const c=document.getElementById('map-container');
+    svg.attr('width',c.clientWidth).attr('height',c.clientHeight);
+  }
+});
+
+// ══════════════════════════════════════════════════
+//  AI FEATURES
+// ══════════════════════════════════════════════════
+
+// ─── Core Claude API call ─────────────────────────
+// ─── API Key 관리 ─────────────────────────────────
+function getApiKey() { return localStorage.getItem('claude_api_key') || ''; }
+
+async function callClaude(messages, system='', maxTokens=1500) {
+  let key = getApiKey();
+  if (!key) {
+    key = prompt('Anthropic API Key를 입력하세요 (sk-ant-으로 시작):');
+    if (!key) throw new Error('API 키가 없습니다.');
+    localStorage.setItem('claude_api_key', key);
+  }
+  const body = { model:'claude-sonnet-4-6', max_tokens:maxTokens, messages };
+  if (system) body.system = system;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body)
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('claude_api_key');
+    throw new Error('API 키가 올바르지 않습니다. 다시 시도하면 재입력 창이 뜹니다.');
+  }
+  if (!res.ok) throw new Error('API 오류 ' + res.status);
+  const data = await res.json();
+  return data.content.map(c => c.type === 'text' ? c.text : '').join('');
+}
+
+// ─── AI Panel ─────────────────────────────────────
+let aiOpen = false;
+const aiHistory = []; // {role, content}
+
+function toggleAI() {
+  aiOpen = !aiOpen;
+  document.getElementById('ai-panel').classList.toggle('open', aiOpen);
+}
+
+function appendAIMsg(role, text, isTyping=false) {
+  const msgs = document.getElementById('ai-messages');
+  const div = document.createElement('div');
+  div.className = 'ai-msg ' + role;
+  div.id = isTyping ? 'ai-typing-msg' : '';
+  const avatar = role==='assistant'?'✨':'👤';
+  if(isTyping) {
+    div.innerHTML = `<div class="ai-msg-avatar">${avatar}</div><div class="ai-msg-bubble"><div class="ai-typing"><span></span><span></span><span></span></div></div>`;
+  } else {
+    // Simple markdown conversion
+    const html = text
+      .replace(/## (.*)/g,'<h2>$1</h2>')
+      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+      .replace(/^- (.*)/gm,'<li>$1</li>')
+      .replace(/(<li>.*<\/li>)/s,'<ul>$1</ul>')
+      .replace(/\n\n/g,'<br><br>')
+      .replace(/\n/g,'<br>');
+    div.innerHTML = `<div class="ai-msg-avatar">${avatar}</div><div class="ai-msg-bubble"><div class="ai-md">${html}</div></div>`;
+  }
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+async function sendAIMessage(text) {
+  if(!text.trim()) return;
+  appendAIMsg('user', text);
+  aiHistory.push({role:'user', content:text});
+  document.getElementById('ai-input').value = '';
+  const typingEl = appendAIMsg('assistant', '', true);
+  
+  try {
+    const system = `당신은 재생에너지 프로젝트 투자 전문 AI 어시스트입니다.
+현재 관리 중인 포트폴리오:
+- HWR: ${PROJECTS.filter(p=>p.portfolio==='HWR').length}개 프로젝트, PV ${PROJECTS.filter(p=>p.portfolio==='HWR').reduce((a,p)=>a+p.pv,0).toLocaleString()} MWac, ESS ${PROJECTS.filter(p=>p.portfolio==='HWR').reduce((a,p)=>a+p.ess,0).toLocaleString()} MW
+- Q-cells: ${PROJECTS.filter(p=>p.portfolio==='Q-cells').length}개 프로젝트
+
+ISO 분포: WECC, PJM, ERCOT, MISO, CAISO, ISO-NE, NYISO, SERC, SPP
+총 프로젝트: ${PROJECTS.length}개, COD 범위: 2026~2032년
+
+한국어로 답변하세요. 구체적인 숫자와 프로젝트명을 활용하세요. 간결하고 실용적으로 답변하세요.`;
+
+    const msgs = aiHistory.slice(-8); // last 8 turns
+    const reply = await callClaude(msgs, system, 1200);
+    typingEl.remove();
+    appendAIMsg('assistant', reply);
+    aiHistory.push({role:'assistant', content:reply});
+  } catch(e) {
+    typingEl.remove();
+    appendAIMsg('assistant', '⚠️ API 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n오류: ' + e.message);
+  }
+}
+
+// Quick actions
+const QUICK_PROMPTS = {
+  report: `현재 포트폴리오 전체에 대한 경영진 보고용 요약 리포트를 작성해주세요. 포트폴리오별 현황, ISO별 분포, COD 연도별 파이프라인, 총 용량 합계를 포함해주세요.`,
+  risk: `현재 포트폴리오의 주요 리스크 요인을 분석해주세요. BLM 프로젝트, 특정 ISO 집중 리스크, COD 일정 리스크, 포트폴리오 다각화 관점에서 분석해주세요.`,
+  cod: `COD 연도별로 프로젝트 현황을 정리해주세요. 2026년부터 연도별 프로젝트 수, 총 용량(PV+ESS), 주요 프로젝트를 보여주세요.`,
+  finance: `각 포트폴리오별 평균 프로젝트 규모, 총 투자 예상 규모(CAPEX), 포트폴리오 밸런스(PV vs ESS 비중)를 분석해주세요.`,
+};
+
+// ─── AI Document Analysis ─────────────────────────
+async function analyzeDocument(doc, project) {
+  const btn = document.getElementById('analyze-btn-'+doc.id);
+  if(btn){ btn.classList.add('loading'); btn.textContent='분석 중...'; }
+  
+  try {
+    let content = [];
+    if(doc.data) {
+      if(doc.mime === 'application/pdf') {
+        content.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:doc.data.split(',')[1]}});
+      } else if(doc.mime.startsWith('image/')) {
+        content.push({type:'image', source:{type:'base64', media_type:doc.mime, data:doc.data.split(',')[1]}});
+      }
+    }
+    content.push({type:'text', text:`
+이 문서는 "${project.name}" 프로젝트(${project.state}, ${project.iso}, ${project.type}, COD ${project.cod})의 ${doc.category}입니다.
+
+다음을 간결하게 분석해주세요:
+1. 📋 **문서 요약** (2-3줄)
+2. ⚠️ **주요 리스크 조항** (페널티, 해지 조건, 의무사항 등)
+3. 📅 **핵심 날짜/기한**
+4. 💰 **금액/가격 조건** (있는 경우)
+5. 🔑 **특이사항 및 검토 필요 항목**
+
+한국어로 답변하세요. 없는 항목은 "해당없음"으로 표시하세요.`});
+
+    const result = await callClaude([{role:'user', content}], '', 1000);
+    
+    // Show result in UI
+    const existingResult = document.getElementById('ai-result-'+doc.id);
+    if(existingResult) existingResult.remove();
+    
+    const resultDiv = document.createElement('div');
+    resultDiv.id = 'ai-result-'+doc.id;
+    resultDiv.className = 'ai-doc-result';
+    const html = result.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+    resultDiv.innerHTML = `<div class="ai-doc-result-title">✨ AI 분석 결과</div>${html}`;
+    
+    const docItem = document.querySelector(`[data-doc-id="${doc.id}"]`);
+    if(docItem) docItem.after(resultDiv);
+    
+  } catch(e) {
+    alert('분석 실패: '+e.message);
+  }
+  
+  if(btn){ btn.classList.remove('loading'); btn.textContent='✨ AI 분석'; }
+}
+
+// ─── AI Financial Assist ──────────────────────────
+async function aiFinancialAssist(project) {
+  const btn = document.getElementById('ai-fin-btn');
+  if(btn){ btn.textContent='분석 중...'; btn.disabled=true; }
+  
+  try {
+    const msg = `태양광/ESS 프로젝트 재무 분석을 해주세요.
+
+프로젝트 정보:
+- 이름: ${project.name}
+- 위치: ${project.state}, ${project.iso}
+- 유형: ${project.type}
+- PV 용량: ${project.pv} MWac
+- ESS 용량: ${project.ess} MW
+- COD: ${project.cod}
+- S/H 카테고리: ${project.cat}
+
+다음을 제공해주세요:
+1. **CAPEX 추정 범위** ($/Wac 기준, 현재 미국 시장 기준)
+2. **적정 OPEX** ($/MWac/year)
+3. **예상 설비이용률** (해당 지역/유형 기준)
+4. **적정 PPA 가격 범위** ($/MWh, ${project.iso} 기준)
+5. **주요 재무 리스크**
+6. **벤치마크 PIRR 범위**
+
+구체적인 숫자 범위로 답변해주세요. 한국어로 답변하세요.`;
+
+    const result = await callClaude([{role:'user',content:msg}], '', 800);
+    
+    const resultArea = document.getElementById('ai-fin-result');
+    if(resultArea) {
+      const html = result.replace(/\*\*(.*?)\*\*/g,'<strong style="color:var(--blue)">$1</strong>').replace(/\n/g,'<br>');
+      resultArea.innerHTML = `<div class="ai-doc-result-title" style="margin-bottom:8px">✨ AI 재무 분석</div><div style="font-size:12px;line-height:1.7;color:var(--t2)">${html}</div>`;
+      resultArea.style.display='block';
+    }
+  } catch(e) {
+    alert('분석 실패: '+e.message);
+  }
+  if(btn){ btn.textContent='✨ AI 재무 분석'; btn.disabled=false; }
+}
+
+// ─── Natural Language Search ──────────────────────
+let aiSearchMode = false;
+let nlSearchTimer = null;
+
+async function doNLSearch(query) {
+  if(!query.trim()) { renderSidebar(); renderStats(); plotProjects(); return; }
+  
+  const prompt = `다음 프로젝트 목록에서 "${query}"에 해당하는 프로젝트들을 찾아주세요.
+
+프로젝트 목록 (id: 이름, 포트폴리오, 주, ISO, COD, 유형, PV MWac, ESS MW, 카테고리):
+${PROJECTS.map(p=>`${p.id}: ${p.name}, ${p.portfolio}, ${p.state}, ${p.iso}, COD${p.cod}, ${p.type}, PV:${p.pv}, ESS:${p.ess}, Cat:${p.cat}`).join('\n')}
+
+조건에 맞는 프로젝트의 id만 JSON 배열로 반환하세요. 예: ["h01","h05","p03"]
+JSON 배열만 반환하고 다른 텍스트는 없어야 합니다.`;
+
+  try {
+    const result = await callClaude([{role:'user',content:prompt}], '', 300);
+    const ids = JSON.parse(result.replace(/```json|```/g,'').trim());
+    state.nlSearchIds = ids;
+    renderSidebar();
+    renderStats();
+    plotProjects();
+  } catch(e) {
+    console.warn('NL search failed', e);
+  }
+}
+
+// Override getFiltered to support NL search
+const _origGetFiltered = getFiltered;
+// Patch getFiltered
+function getFilteredAI() {
+  if(aiSearchMode && state.nlSearchIds) {
+    const base = _origGetFiltered();
+    return base.filter(p => state.nlSearchIds.includes(p.id));
+  }
+  return _origGetFiltered();
+}
+
+// ─── Inject AI buttons into tabs ─────────────────
+// Patch renderFinancial to inject AI assist button
+const _origRenderFinancial = renderFinancial;
+renderFinancial = function(body, p, pd) {
+  _origRenderFinancial(body, p, pd);
+  // Add AI assist button after the calculate button
+  const calcBtn = document.getElementById('calc-btn');
+  if(calcBtn) {
+    const aiBtn = document.createElement('button');
+    aiBtn.id = 'ai-fin-btn';
+    aiBtn.className = 'ai-analyze-btn';
+    aiBtn.style = 'margin-top:6px;width:100%;justify-content:center;padding:7px;border-radius:8px;font-size:12px';
+    aiBtn.innerHTML = '✨ AI 재무 분석 (시장 벤치마크)';
+    aiBtn.onclick = () => aiFinancialAssist(p);
+    
+    const resultDiv = document.createElement('div');
+    resultDiv.id = 'ai-fin-result';
+    resultDiv.className = 'ai-doc-result';
+    resultDiv.style.display = 'none';
+    resultDiv.style.marginTop = '8px';
+    
+    calcBtn.after(aiBtn);
+    aiBtn.after(resultDiv);
+  }
+};
+
+// Patch renderDocs to inject AI analyze button per document
+const _origRenderDocs = renderDocs;
+renderDocs = function(body, p, pd) {
+  _origRenderDocs(body, p, pd);
+  // Add analyze buttons to each doc item
+  const docs = pd.docs || [];
+  docs.forEach(doc => {
+    const docItem = document.querySelector(`[data-del="${doc.id}"]`);
+    if(docItem) {
+      const analyzeBtn = document.createElement('button');
+      analyzeBtn.id = 'analyze-btn-'+doc.id;
+      analyzeBtn.className = 'ai-analyze-btn';
+      analyzeBtn.innerHTML = '✨ AI 분석';
+      analyzeBtn.onclick = () => analyzeDocument(doc, p);
+      docItem.parentElement.insertBefore(analyzeBtn, docItem);
+    }
+  });
+  // Add data-doc-id to doc items for result insertion
+  docs.forEach(doc => {
+    const delBtn = document.querySelector(`[data-del="${doc.id}"]`);
+    if(delBtn) {
+      const row = delBtn.closest('.doc-item');
+      if(row) row.dataset.docId = doc.id;
+    }
+  });
+};
+
+// ─── Event Listeners (AI) ─────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // AI FAB
+  document.getElementById('ai-fab').onclick = toggleAI;
+  document.getElementById('ai-panel-close').onclick = toggleAI;
+  
+  // Quick action buttons
+  document.querySelectorAll('.ai-qa-btn').forEach(btn => {
+    btn.onclick = () => {
+      const prompt = QUICK_PROMPTS[btn.dataset.action];
+      if(prompt) sendAIMessage(prompt);
+    };
+  });
+  
+  // AI input
+  const aiInput = document.getElementById('ai-input');
+  document.getElementById('ai-send').onclick = () => sendAIMessage(aiInput.value);
+  aiInput.addEventListener('keydown', e => {
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendAIMessage(aiInput.value); }
+  });
+  aiInput.addEventListener('input', () => {
+    aiInput.style.height = 'auto';
+    aiInput.style.height = Math.min(aiInput.scrollHeight, 80)+'px';
+  });
+  
+  // AI Search toggle
+  const aiSearchToggle = document.getElementById('ai-search-toggle');
+  const searchInput = document.getElementById('search-input');
+  aiSearchToggle.onclick = () => {
+    aiSearchMode = !aiSearchMode;
+    aiSearchToggle.classList.toggle('active', aiSearchMode);
+    document.getElementById('ai-search-hint').style.display = aiSearchMode?'block':'none';
+    state.nlSearchIds = null;
+    if(aiSearchMode) {
+      searchInput.placeholder = 'AI에게 물어보세요 (예: 2028년 PJM ESS 프로젝트)';
+      // Override getFiltered
+      window.getFiltered = getFilteredAI;
+    } else {
+      searchInput.placeholder = '프로젝트 검색 (이름, 주, ISO...)';
+      state.nlSearchIds = null;
+      window.getFiltered = _origGetFiltered;
+      renderSidebar(); renderStats(); plotProjects();
+    }
+  };
+  
+  // Override search input for AI mode
+  searchInput.addEventListener('input', e => {
+    if(aiSearchMode) {
+      clearTimeout(nlSearchTimer);
+      if(e.target.value.trim().length > 2) {
+        nlSearchTimer = setTimeout(() => doNLSearch(e.target.value), 800);
+      }
+    } else {
+      state.search = e.target.value;
+      renderSidebar(); renderStats(); plotProjects();
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════
+//  환율 & 언어 전환
+// ══════════════════════════════════════════════════
+
+// ─── 환율 데이터 구조 ─────────────────────────────
+const THIS_YEAR = new Date().getFullYear();
+const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const FUTURE_YEARS = [THIS_YEAR+1, THIS_YEAR+2, THIS_YEAR+3, THIS_YEAR+4, THIS_YEAR+5];
+const DEFAULT_FX = 1380;
+
+// localStorage에서 환율 로드
+function loadFXData() {
+  try {
+    return JSON.parse(localStorage.getItem('fx_data') || 'null') || initFXData();
+  } catch(e) { return initFXData(); }
+}
+
+function initFXData() {
+  const data = { monthly: {}, yearly: {} };
+  // 당해년도 월별 기본값
+  for (let m = 1; m <= 12; m++) {
+    data.monthly[THIS_YEAR + '-' + m] = DEFAULT_FX;
+  }
+  // 미래 연도 연간 기본값
+  FUTURE_YEARS.forEach(y => { data.yearly[y] = DEFAULT_FX; });
+  return data;
+}
+
+let fxData = loadFXData();
+let liveRate = null;
+let showKRW = false;
+let currentLang = 'ko';
+
+// 특정 연도의 환율 반환 (당해=해당월, 미래=연간, 과거=연간 or 기본)
+function getFXRate(year, month) {
+  month = month || new Date().getMonth() + 1;
+  if (year === THIS_YEAR) {
+    return fxData.monthly[year + '-' + month] || DEFAULT_FX;
+  }
+  return fxData.yearly[year] || DEFAULT_FX;
+}
+
+// 현재 표시용 환율 (현재 월 기준)
+function getCurrentFX() {
+  return getFXRate(THIS_YEAR, new Date().getMonth() + 1);
+}
+
+function updateFXBadge() {
+  const rate = getCurrentFX();
+  document.getElementById('fx-rate').textContent = rate.toLocaleString() + '원';
+}
+
+// ─── 실시간 환율 조회 ─────────────────────────────
+async function fetchLiveRate() {
+  try {
+    const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+    const data = await res.json();
+    liveRate = Math.round(data.rates.KRW);
+    return liveRate;
+  } catch(e) {
+    return null;
+  }
+}
+
+// ─── 환율 모달 ────────────────────────────────────
+function openFXModal() {
+  const modal = document.getElementById('fx-modal');
+  modal.style.display = 'flex';
+  renderFXModal();
+  // 실시간 환율 조회
+  document.getElementById('fx-ref-rate').textContent = '조회중...';
+  fetchLiveRate().then(rate => {
+    document.getElementById('fx-ref-rate').textContent =
+      rate ? rate.toLocaleString() + '원' : '조회 실패';
+  });
+}
+
+function closeFXModal() {
+  document.getElementById('fx-modal').style.display = 'none';
+}
+
+function renderFXModal() {
+  // 당해년도 월별 그리드
+  document.getElementById('fx-current-year-label').textContent = THIS_YEAR + '년 월별 환율 (원)';
+  const mgrid = document.getElementById('fx-monthly-grid');
+  mgrid.innerHTML = MONTHS.map((m, i) => {
+    const key = THIS_YEAR + '-' + (i+1);
+    const val = fxData.monthly[key] || DEFAULT_FX;
+    return `<div>
+      <div style="font-size:10px;color:var(--t3);margin-bottom:3px">${m}</div>
+      <input type="number" id="fx-m-${i+1}" value="${val}"
+        style="width:100%;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:12px;font-family:var(--font)"
+        onchange="previewFX()">
+    </div>`;
+  }).join('');
+
+  // 미래 연도 연간
+  const ygrid = document.getElementById('fx-yearly-grid');
+  ygrid.innerHTML = FUTURE_YEARS.map(y => {
+    const val = fxData.yearly[y] || DEFAULT_FX;
+    return `<div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:12px;color:var(--t2);min-width:50px">${y}년</span>
+      <input type="number" id="fx-y-${y}" value="${val}"
+        style="flex:1;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:12px;font-family:var(--font)"
+        onchange="previewFX()">
+      <span style="font-size:11px;color:var(--t3)">원/USD</span>
+    </div>`;
+  }).join('');
+}
+
+function fillFromLive() {
+  if (!liveRate) { alert('실시간 환율을 먼저 조회해주세요.'); return; }
+  for (let m = 1; m <= 12; m++) {
+    const el = document.getElementById('fx-m-' + m);
+    if (el) el.value = liveRate;
+  }
+  FUTURE_YEARS.forEach(y => {
+    const el = document.getElementById('fx-y-' + y);
+    if (el) el.value = liveRate;
+  });
+}
+
+function previewFX() {
+  // 미리보기: 현재 월 값으로 배지 업데이트
+  const curM = new Date().getMonth() + 1;
+  const el = document.getElementById('fx-m-' + curM);
+  if (el && el.value) {
+    document.getElementById('fx-rate').textContent = parseInt(el.value).toLocaleString() + '원';
+  }
+}
+
+function saveFX() {
+  const newData = { monthly: {}, yearly: {} };
+  for (let m = 1; m <= 12; m++) {
+    const el = document.getElementById('fx-m-' + m);
+    newData.monthly[THIS_YEAR + '-' + m] = el ? parseInt(el.value) || DEFAULT_FX : DEFAULT_FX;
+  }
+  FUTURE_YEARS.forEach(y => {
+    const el = document.getElementById('fx-y-' + y);
+    newData.yearly[y] = el ? parseInt(el.value) || DEFAULT_FX : DEFAULT_FX;
+  });
+  fxData = newData;
+  localStorage.setItem('fx_data', JSON.stringify(fxData));
+  updateFXBadge();
+  if (showKRW) updateCurrencyDisplay();
+  closeFXModal();
+}
+
+// ─── 통화 전환 ────────────────────────────────────
+function toggleCurrency() {
+  showKRW = !showKRW;
+  document.getElementById('currency-label').textContent = showKRW ? '₩ KRW' : '$ USD';
+  document.getElementById('btn-currency').style.color = showKRW ? 'var(--amber)' : 'var(--t2)';
+  updateCurrencyDisplay();
+}
+
+function updateCurrencyDisplay() {
+  document.querySelectorAll('[data-usd]').forEach(el => {
+    const usd = parseFloat(el.dataset.usd);
+    if (showKRW) {
+      const rate = getCurrentFX();
+      const krw = Math.round(usd * rate / 100) / 10;
+      el.textContent = krw.toLocaleString() + '억원';
+    } else {
+      el.textContent = '$' + usd + 'M';
+    }
+  });
+}
+
+// ─── 초기화 ───────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateFXBadge();
+  // 모달 배경 클릭 시 닫기
+  document.getElementById('fx-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeFXModal();
+  });
+});
+
+const LANG = {
+  ko: {
+    total: '총', pv: 'PV', ess: 'ESS',
+    projList: '프로젝트 목록',
+    divest: "'26 매각 대상",
+    sh: 'Safe Harbor',
+    other: '기타 파이프라인',
+    searchPlaceholder: '프로젝트 검색 (이름, 주, ISO...)',
+    selectPrompt: '프로젝트를 선택하세요',
+    overview: '개요', financial: '재무', budget: '예산', docs: '문서', schedule: '일정',
+    divestBtn: '💰 매각현황', atlasBtn: '🏔 Atlas', ppaBtn: '⚡ PPA',
+    backBtn: '← 파이프라인으로',
+    // 지도 범례
+    legendPortfolio: '포트폴리오', legendType: '유형',
+    // Atlas
+    atlasTitle: '🏔 Atlas North 1st Milestone',
+    atlasSub: 'Lydian 1st Milestone Payment 조건 달성 현황',
+    atlasTotal: '전체 항목', atlasDone: '완료', atlasPending: '미착수', atlasRate: '전체 달성률',
+    atlasColItem: '항목', atlasColTarget: 'TARGET 일정', atlasColDday: 'D-DAY', atlasColStatus: '상태',
+    // PPA
+    ppaTitle: '⚡ PPA 진척 현황',
+    ppaSub: '프로젝트별 PPA 단계 관리',
+    ppaAll: '전체', ppaRfp: 'RFP 참여', ppaSl: 'SL/BL', ppaContract: '계약 완료',
+    ppaColProj: '프로젝트', ppaColIso: 'ISO', ppaColState: '주', ppaColStage: '현재 단계', ppaColNote: '비고',
+    // 매각현황
+    divestTitle: '💰 매각현황 (2026년)',
+    divestSub: '8개 프로젝트 · 예상 총 매각이익 $142M',
+    divestColName: '프로젝트', divestColType: '유형', divestColIso: 'ISO · 주',
+    divestColStage: '현재 단계', divestColProg: '진척도', divestColProb: '확도',
+    divestColMargin: '예상이익', divestColNote: '비고',
+    // AI 패널
+    aiTitle: 'AI 어시스트',
+    aiSub: '포트폴리오 분석 · 문서 분석 · 자연어 검색',
+    aiReport: '📊 포트폴리오 리포트', aiRisk: '⚠️ 리스크 분석',
+    aiCod: '📅 COD 현황', aiFinance: '💰 재무 요약',
+    aiPlaceholder: '예: PJM 지역 대용량 ESS 프로젝트 현황은?',
+  },
+  en: {
+    total: 'Total', pv: 'PV', ess: 'ESS',
+    projList: 'Project List',
+    divest: "'26 Divestment",
+    sh: 'Safe Harbor',
+    other: 'Other Pipeline',
+    searchPlaceholder: 'Search projects (name, state, ISO...)',
+    selectPrompt: 'Select a project',
+    overview: 'Overview', financial: 'Financial', budget: 'Budget', docs: 'Documents', schedule: 'Schedule',
+    divestBtn: '💰 Divestment', atlasBtn: '🏔 Atlas', ppaBtn: '⚡ PPA',
+    backBtn: '← Back to Pipeline',
+    // Map legend
+    legendPortfolio: 'Portfolio', legendType: 'Type',
+    // Atlas
+    atlasTitle: '🏔 Atlas North 1st Milestone',
+    atlasSub: 'Lydian 1st Milestone Payment Conditions',
+    atlasTotal: 'Total Items', atlasDone: 'Done', atlasPending: 'Pending', atlasRate: 'Achievement Rate',
+    atlasColItem: 'Item', atlasColTarget: 'Target Date', atlasColDday: 'D-DAY', atlasColStatus: 'Status',
+    // PPA
+    ppaTitle: '⚡ PPA Progress',
+    ppaSub: 'PPA Stage Management by Project',
+    ppaAll: 'Total', ppaRfp: 'RFP', ppaSl: 'SL/BL', ppaContract: 'Contracted',
+    ppaColProj: 'Project', ppaColIso: 'ISO', ppaColState: 'State', ppaColStage: 'Stage', ppaColNote: 'Note',
+    // Divestment
+    divestTitle: '💰 Divestment Status (2026)',
+    divestSub: '8 Projects · Est. Total Margin $142M',
+    divestColName: 'Project', divestColType: 'Type', divestColIso: 'ISO · State',
+    divestColStage: 'Stage', divestColProg: 'Progress', divestColProb: 'Prob.',
+    divestColMargin: 'Est. Margin', divestColNote: 'Note',
+    // AI Panel
+    aiTitle: 'AI Assist',
+    aiSub: 'Portfolio Analysis · Document Review · NL Search',
+    aiReport: '📊 Portfolio Report', aiRisk: '⚠️ Risk Analysis',
+    aiCod: '📅 COD Status', aiFinance: '💰 Finance Summary',
+    aiPlaceholder: 'e.g. Large-scale ESS projects in PJM region?',
+  }
+};
+
+function toggleLang() {
+  currentLang = currentLang === 'ko' ? 'en' : 'ko';
+  const btn = document.getElementById('btn-lang');
+  btn.textContent = currentLang === 'ko' ? 'KO' : 'EN';
+  btn.style.color = currentLang === 'en' ? 'var(--blue)' : 'var(--t2)';
+  applyLang();
+}
+
+function applyLang() {
+  const L = LANG[currentLang];
+
+  // 검색창
+  const si = document.getElementById('search-input');
+  if (si) si.placeholder = L.searchPlaceholder;
+
+  // 탑바 버튼
+  const bd = document.getElementById('btn-divestment');
+  const ba = document.getElementById('btn-atlas');
+  const bp = document.getElementById('btn-ppa');
+  if (bd) bd.textContent = L.divestBtn;
+  if (ba) ba.textContent = L.atlasBtn;
+  if (bp) bp.textContent = L.ppaBtn;
+
+  // 사이드바 헤더
+  const sh = document.querySelector('.sidebar-head .sidebar-section-label');
+  if (sh) sh.textContent = L.projList;
+
+  // 선택 안내 메시지
+  const ns = document.querySelector('.no-selection-text');
+  if (ns) ns.textContent = L.selectPrompt;
+
+  // 상세 패널 탭
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const map = {overview: L.overview, financial: L.financial, budget: L.budget, docs: L.docs, schedule: L.schedule};
+    if (map[btn.dataset.tab]) btn.textContent = map[btn.dataset.tab];
+  });
+
+  // ← 파이프라인으로 버튼들
+  document.querySelectorAll('[id^="close-"]').forEach(btn => {
+    if (btn.tagName === 'BUTTON') btn.textContent = L.backBtn;
+  });
+
+  // 지도 범례
+  document.querySelectorAll('.legend-title').forEach((el, i) => {
+    el.textContent = i === 0 ? L.legendPortfolio : L.legendType;
+  });
+
+  // AI 패널
+  const aiTitle = document.querySelector('.ai-panel-title');
+  const aiSub   = document.querySelector('.ai-panel-sub');
+  if (aiTitle) aiTitle.textContent = L.aiTitle;
+  if (aiSub)   aiSub.textContent   = L.aiSub;
+  const aiInput = document.getElementById('ai-input');
+  if (aiInput) aiInput.placeholder = L.aiPlaceholder;
+  document.querySelectorAll('.ai-qa-btn').forEach(btn => {
+    const map = {report: L.aiReport, risk: L.aiRisk, cod: L.aiCod, finance: L.aiFinance};
+    if (map[btn.dataset.action]) btn.textContent = map[btn.dataset.action];
+  });
+
+  // 사이드바 그룹 재렌더 (그룹명 언어 반영)
+  renderSidebar();
+
+  // 현재 열린 페이지 재렌더
+  const divestPage = document.getElementById('page-divestment');
+  const atlasPage  = document.getElementById('page-atlas');
+  const ppaPage    = document.getElementById('page-ppa');
+  if (divestPage && divestPage.style.display !== 'none') renderDivestment();
+  if (atlasPage  && atlasPage.style.display  !== 'none') renderAtlas();
+  if (ppaPage    && ppaPage.style.display    !== 'none') renderPPA();
+}
+
+// ─── renderSidebar 언어 반영은 LANG 객체로 직접 처리 ─
+
+const DIVEST = [
+  {name:'Boulder Solar 3', type:'LCC',    prob:'H', margin:40,  prog:40,  stage:'NBO',      iso:'WECC',  state:'NV', note:'Morrison 협의 진행 중, ROFO 절차 병행'},
+  {name:'Bonanza Peak',    type:'LCC',    prob:'M', margin:50,  prog:20,  stage:'NDA/티저', iso:'CAISO', state:'CA', note:'Lydian 초기 협의 완료, 업데이트 경제성 검토 중'},
+  {name:'Oberon II',       type:'운영업체', prob:'M', margin:5,   prog:20,  stage:'NDA/티저', iso:'ERCOT', state:'TX', note:'Disney COD 연장 논의 중, 3월 NDA 아웃리치 계획'},
+  {name:'Oberon III',      type:'운영업체', prob:'M', margin:10,  prog:20,  stage:'NDA/티저', iso:'ERCOT', state:'TX', note:'Mars 조달 중단, 신규 Offtaker 물색 중'},
+  {name:'Oberon IV',       type:'운영업체', prob:'M', margin:5,   prog:20,  stage:'NDA/티저', iso:'ERCOT', state:'TX', note:'TTE NBO 제출, Premium 재협의 요청 중'},
+  {name:'Taormina',        type:'운영업체', prob:'M', margin:10,  prog:20,  stage:'NDA/티저', iso:'ERCOT', state:'TX', note:'Austin Energy / CPS RFP 제출 완료, Shortlist 4월 예정'},
+  {name:'Lavender',        type:'운영업체', prob:'M', margin:10,  prog:20,  stage:'NDA/티저', iso:'ERCOT', state:'TX', note:'Taormina와 동시 진행, 바이어 리스트 작성 중'},
+  {name:'Gibson',          type:'운영업체', prob:'L', margin:12,  prog:0,   stage:'준비',     iso:'PJM',   state:'VA', note:'Dominion Shortlist 4월 발표 후 계획 수립'},
+];
+
+const STAGE_COLOR = {
+  '준비':'#5C5A70','NDA/티저':'#4A90E2','NBO':'#A78BFA',
+  'BO':'#FBBF24','SPA협상':'#F87171','클로징':'#34D399'
+};
+
+function renderDivestment() {
+  const L = LANG[currentLang];
+  const totalMargin = DIVEST.reduce((s,d)=>s+d.margin,0);
+  const hCount = DIVEST.filter(d=>d.prob==='H').length;
+  const avgProg = Math.round(DIVEST.reduce((s,d)=>s+d.prog,0)/DIVEST.length);
+
+  // 페이지 제목/설명
+  document.querySelector('#page-divestment .div-page-title').textContent = L.divestTitle;
+  document.querySelector('#page-divestment .div-page-sub').textContent   = L.divestSub;
+  document.querySelector('#close-divestment').textContent = L.backBtn;
+
+  // KPI 카드
+  document.getElementById('div-kpi').innerHTML = [
+    {label:'대상 프로젝트', val:DIVEST.length+'건',       color:'var(--t1)'},
+    {label:'예상 매각이익', val:'$'+totalMargin+'M',      color:'var(--green)'},
+    {label:'High 확도',    val:hCount+'건',              color:'var(--blue)'},
+    {label:'평균 진척도',  val:avgProg+'%',              color:'var(--amber)'},
+  ].map(k=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">${k.label}</div>
+      <div style="font-size:26px;font-weight:800;color:${k.color}">${k.val}</div>
+    </div>`).join('');
+
+  // 테이블
+  document.getElementById('div-table').innerHTML = `
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        ${[L.divestColName, L.divestColType, L.divestColIso, L.divestColStage, L.divestColProg, L.divestColProb, L.divestColMargin, L.divestColNote]
+          .map(h=>`<th style="padding:10px 14px;background:var(--surface2);font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;text-align:left">${h}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${DIVEST.map(d=>{
+        const sc = STAGE_COLOR[d.stage]||'#5C5A70';
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:11px 14px;font-weight:600">${d.name}</td>
+          <td style="padding:11px 14px;color:var(--t2)">${d.type}</td>
+          <td style="padding:11px 14px;color:var(--t2)">${d.iso} · ${d.state}</td>
+          <td style="padding:11px 14px">
+            <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;background:${sc}22;color:${sc}">${d.stage}</span>
+          </td>
+          <td style="padding:11px 14px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="width:80px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
+                <div style="width:${d.prog}%;height:100%;background:${sc};border-radius:3px"></div>
+              </div>
+              <span style="font-size:11px;color:var(--t2)">${d.prog}%</span>
+            </div>
+          </td>
+          <td style="padding:11px 14px">
+            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;${PROB_STYLE[d.prob]}">${d.prob}</span>
+          </td>
+          <td style="padding:11px 14px;font-weight:700;color:var(--green)" data-usd="${d.margin}">$${d.margin}M</td>
+          <td style="padding:11px 14px;font-size:11px;color:var(--t2);max-width:220px">${d.note}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>`;
+}
+
+// 버튼 이벤트
+document.getElementById('btn-divestment').addEventListener('click', () => {
+  document.getElementById('page-divestment').style.display = 'block';
+  renderDivestment();
+});
+document.getElementById('close-divestment').addEventListener('click', () => {
+  document.getElementById('page-divestment').style.display = 'none';
+});
+
+// ══════════════════════════════════════════════════
+//  Atlas North 1st Milestone
+// ══════════════════════════════════════════════════
+const ATLAS_MS = [
+  {id:'a1', item:'2.12(a)', name:'Tax Opinion / Insurance',         target:'2026-03-31', status:'partial'},
+  {id:'a2', item:'2.12(b)', name:'Revenue Guarantee 실행본',         target:'2026-06-20', status:'pending'},
+  {id:'a3', item:'2.12(c)', name:'PPA Amendment + CPUC 승인',        target:'2026-06-01', status:'partial'},
+  {id:'a4', item:'2.12(d)', name:'Shared Facilities Agreement',      target:'2026-06-01', status:'pending'},
+  {id:'a5', item:'2.12(e)', name:'Site Control (Lease/ROW/Easement)',target:'2026-06-30', status:'pending'},
+  {id:'a6', item:'2.12(f)', name:'CAP License recorded copy',        target:'2026-03-31', status:'done'},
+  {id:'a7', item:'2.12(g)', name:'Co-Tenancy Amendment + CAISO 제출',target:'2026-06-01', status:'pending'},
+  {id:'a8', item:'2.12(h)', name:'EPCA',                             target:'2026-06-15', status:'pending'},
+  {id:'a9', item:'2.12(i~l)', name:'Sublease / Estoppel / CUP',     target:'2026-04-30', status:'partial'},
+  {id:'a10',item:'2.12(m~n)', name:'Title Proforma / Survey',        target:'2026-04-30', status:'pending'},
+  {id:'a11',item:'2.12(o~p)', name:'LNTP assignment / Lien release', target:'2026-06-01', status:'partial'},
+  {id:'a12',item:'2.12(q)', name:'Korean counsel opinion',           target:'2026-06-01', status:'pending'},
+];
+
+// localStorage에서 상태 복원
+try {
+  const saved = JSON.parse(localStorage.getItem('atlas_ms') || '[]');
+  saved.forEach(s => { const m = ATLAS_MS.find(x=>x.id===s.id); if(m) m.status=s.status; });
+} catch(e) {}
+
+function saveAtlas() {
+  localStorage.setItem('atlas_ms', JSON.stringify(ATLAS_MS.map(m=>({id:m.id,status:m.status}))));
+}
+
+function renderAtlas() {
+  const L = LANG[currentLang];
+  const today = new Date();
+  const done    = ATLAS_MS.filter(m=>m.status==='done').length;
+  const partial = ATLAS_MS.filter(m=>m.status==='partial').length;
+  const pct = Math.round((done + partial*0.5) / ATLAS_MS.length * 100);
+
+  const STATUS = {
+    done:    {label: currentLang==='ko'?'완료':'Done',       cls:'background:rgba(52,211,153,.15);color:#34D399'},
+    partial: {label:'Partially',                              cls:'background:rgba(251,191,36,.15);color:#FBBF24'},
+    progress:{label: currentLang==='ko'?'진행중':'In Progress', cls:'background:rgba(74,144,226,.15);color:#4A90E2'},
+    pending: {label: currentLang==='ko'?'미착수':'Pending',   cls:'background:var(--surface2);color:var(--t3)'},
+  };
+
+  // 페이지 제목
+  const atTitle = document.querySelector('#page-atlas .atlas-page-title');
+  const atSub   = document.querySelector('#page-atlas .atlas-page-sub');
+  if (atTitle) atTitle.textContent = L.atlasTitle;
+  if (atSub)   atSub.textContent   = L.atlasSub;
+  document.getElementById('close-atlas').textContent = L.backBtn;
+
+  // KPI
+  document.getElementById('atlas-kpi').innerHTML = [
+    {label: L.atlasTotal, val:ATLAS_MS.length,             color:'var(--t1)'},
+    {label: L.atlasDone,  val:done,                        color:'var(--green)'},
+    {label:'Partially',   val:partial,                      color:'var(--amber)'},
+    {label: L.atlasPending, val:ATLAS_MS.length-done-partial, color:'var(--t3)'},
+  ].map(k=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+      <div style="font-size:11px;color:var(--t3);margin-bottom:5px">${k.label}</div>
+      <div style="font-size:26px;font-weight:800;color:${k.color}">${k.val}</div>
+    </div>`).join('');
+
+  // 진행바
+  document.getElementById('atlas-progress-bar').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--t2);margin-bottom:8px">
+      <span>${L.atlasRate}</span><span style="font-weight:700;color:var(--blue)">${pct}%</span>
+    </div>
+    <div style="height:8px;background:var(--surface3);border-radius:4px;overflow:hidden">
+      <div style="width:${pct}%;height:100%;background:var(--blue);border-radius:4px;transition:width .4s"></div>
+    </div>`;
+
+  // 항목 리스트
+  document.getElementById('atlas-list').innerHTML = `
+    <div style="display:grid;grid-template-columns:160px 130px 80px 1fr;gap:10px;padding:6px 14px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;background:var(--surface);border:1px solid var(--border);border-radius:10px 10px 0 0;border-bottom:none">
+      <span>${L.atlasColItem}</span><span>${L.atlasColTarget}</span><span>${L.atlasColDday}</span><span>${L.atlasColStatus}</span>
+    </div>
+    ${ATLAS_MS.map((m,i) => {
+      const d = new Date(m.target);
+      const diff = Math.round((d - today) / 86400000);
+      const todayLabel = currentLang==='ko' ? '오늘' : 'Today';
+      const dday = diff < 0  ? `<span style="color:var(--red)">D+${Math.abs(diff)}</span>`
+                 : diff === 0 ? `<span style="color:var(--amber)">${todayLabel}</span>`
+                 : diff <= 7  ? `<span style="color:var(--amber)">D-${diff}</span>`
+                 :               `<span style="color:var(--t3)">D-${diff}</span>`;
+      const st = STATUS[m.status] || STATUS.pending;
+      const isLast = i === ATLAS_MS.length - 1;
+      return `
+        <div style="display:grid;grid-template-columns:160px 130px 80px 1fr;gap:10px;align-items:center;padding:10px 14px;background:var(--surface);border:1px solid var(--border);${isLast?'border-radius:0 0 10px 10px':'border-bottom:none'}">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--t1)">${m.item}</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:1px">${m.name}</div>
+          </div>
+          <div style="font-size:12px;color:var(--t2)">${m.target}</div>
+          <div style="font-size:12px">${dday}</div>
+          <div>
+            <select data-atlas-id="${m.id}" style="padding:3px 8px;border-radius:20px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:var(--font);${st.cls}">
+              <option value="done"     ${m.status==='done'    ?'selected':''}>완료</option>
+              <option value="partial"  ${m.status==='partial' ?'selected':''}>Partially</option>
+              <option value="progress" ${m.status==='progress'?'selected':''}>진행중</option>
+              <option value="pending"  ${m.status==='pending' ?'selected':''}>미착수</option>
+            </select>
+          </div>
+        </div>`;
+    }).join('')}`;
+
+  // 상태 변경 이벤트
+  document.querySelectorAll('[data-atlas-id]').forEach(sel => {
+    sel.onchange = () => {
+      const m = ATLAS_MS.find(x => x.id === sel.dataset.atlasId);
+      if (m) { m.status = sel.value; saveAtlas(); renderAtlas(); }
+    };
+  });
+}
+
+document.getElementById('btn-atlas').addEventListener('click', () => {
+  document.getElementById('page-atlas').style.display = 'block';
+  renderAtlas();
+});
+document.getElementById('close-atlas').addEventListener('click', () => {
+  document.getElementById('page-atlas').style.display = 'none';
+});
+
+// ══════════════════════════════════════════════════
+//  PPA 현황
+// ══════════════════════════════════════════════════
+const PPA_DATA = [
+  {id:'pp1', name:'Atlas 15',      iso:'CAISO', state:'AZ', stage:'BL',  note:'BL 논의 진행 중'},
+  {id:'pp2', name:'Oberon 3',      iso:'ERCOT', state:'TX', stage:'',    note:'신규 Offtaker 물색 중'},
+  {id:'pp3', name:'Oberon 4',      iso:'ERCOT', state:'TX', stage:'',    note:'Mars PPA 재개 예정'},
+  {id:'pp4', name:'Harlem River',  iso:'NYISO', state:'NY', stage:'RFP', note:'NYSERDA ISC RFP 제출 완료'},
+  {id:'pp5', name:'Apelt Ranch',   iso:'WECC',  state:'CO', stage:'',    note:'PSCo JTS RFP 4/27 예정'},
+  {id:'pp6', name:'Staten Island', iso:'NYISO', state:'NY', stage:'',    note:'2차 Readiness Deposit 납부 완료'},
+  {id:'pp7', name:'Greasewood',    iso:'ERCOT', state:'TX', stage:'',    note:'Oracle RFP Non-binding 제출'},
+  {id:'pp8', name:'Barkley Creek', iso:'ERCOT', state:'TX', stage:'',    note:'DC/Chariot 연계 개발 검토'},
+  {id:'pp9', name:'Taormina',      iso:'ERCOT', state:'TX', stage:'RFP', note:'Austin Energy / CPS RFP 완료'},
+  {id:'pp10',name:'Lavender',      iso:'ERCOT', state:'TX', stage:'RFP', note:'Taormina와 동시 진행'},
+  {id:'pp11',name:'Black Star',    iso:'WECC',  state:'CO', stage:'',    note:'PSCo JTS RFP 대기'},
+  {id:'pp12',name:'Florence',      iso:'MISO',  state:'WI', stage:'',    note:'WEC와 BTA 협의 중'},
+  {id:'pp13',name:'Keystone',      iso:'WECC',  state:'CO', stage:'',    note:'JTS RFP 대기'},
+  {id:'pp14',name:'Muddy Creek',   iso:'WECC',  state:'OR', stage:'',    note:'PacifiCorp RFP 준비'},
+  {id:'pp15',name:'Twinkle',       iso:'WECC',  state:'CO', stage:'',    note:'JTS RFP 준비 중'},
+  {id:'pp16',name:'Bay City',      iso:'SERC',  state:'NC', stage:'',    note:'Duke RFP 9월 예정'},
+  {id:'pp17',name:'Borden',        iso:'SERC',  state:'NC', stage:'',    note:'Duke RFP 7/30 기한'},
+  {id:'pp18',name:'Gibson',        iso:'PJM',   state:'VA', stage:'RFP', note:'Dominion RFP 제출 완료'},
+];
+
+// localStorage 복원
+try {
+  const saved = JSON.parse(localStorage.getItem('ppa_data') || '[]');
+  saved.forEach(s => { const p = PPA_DATA.find(x=>x.id===s.id); if(p) p.stage=s.stage; });
+} catch(e) {}
+
+function savePPA() {
+  localStorage.setItem('ppa_data', JSON.stringify(PPA_DATA.map(p=>({id:p.id,stage:p.stage}))));
+}
+
+const PPA_STAGE_STYLE = {
+  '':    'background:var(--surface2);color:var(--t3)',
+  'RFP': 'background:rgba(74,144,226,.15);color:#4A90E2',
+  'SL':  'background:rgba(167,139,250,.15);color:#A78BFA',
+  'BL':  'background:rgba(251,191,36,.15);color:#FBBF24',
+  '계약': 'background:rgba(52,211,153,.15);color:#34D399',
+};
+
+function renderPPA() {
+  const L = LANG[currentLang];
+  const cnt = s => PPA_DATA.filter(p=>p.stage===s).length;
+  const contractLabel = currentLang === 'ko' ? '계약' : 'Contract';
+
+  // 페이지 제목
+  const ppTitle = document.querySelector('#page-ppa .ppa-page-title');
+  const ppSub   = document.querySelector('#page-ppa .ppa-page-sub');
+  if (ppTitle) ppTitle.textContent = L.ppaTitle;
+  if (ppSub)   ppSub.textContent   = L.ppaSub;
+  document.getElementById('close-ppa').textContent = L.backBtn;
+
+  // KPI
+  document.getElementById('ppa-kpi').innerHTML = [
+    {label: L.ppaAll,      val:PPA_DATA.length,          color:'var(--t1)'},
+    {label: L.ppaRfp,      val:cnt('RFP'),                color:'var(--blue)'},
+    {label: L.ppaSl,       val:cnt('SL')+cnt('BL'),       color:'var(--amber)'},
+    {label: L.ppaContract, val:cnt('계약'),               color:'var(--green)'},
+  ].map(k=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+      <div style="font-size:11px;color:var(--t3);margin-bottom:5px">${k.label}</div>
+      <div style="font-size:26px;font-weight:800;color:${k.color}">${k.val}</div>
+    </div>`).join('');
+
+  // 퍼널
+  const stages = ['RFP','SL','BL','계약'];
+  const colors  = {'RFP':'var(--blue)','SL':'var(--purple)','BL':'var(--amber)','계약':'var(--green)'};
+  document.getElementById('ppa-funnel').innerHTML = stages.map(s=>`
+    <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:10px;color:var(--t3);margin-bottom:4px">${s === '계약' ? contractLabel : s}</div>
+      <div style="font-size:22px;font-weight:800;color:${colors[s]}">${cnt(s)}</div>
+    </div>`).join('');
+
+  // 테이블
+  document.getElementById('ppa-table').innerHTML = `
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        ${[L.ppaColProj, L.ppaColIso, L.ppaColState, L.ppaColStage, L.ppaColNote]
+          .map(h=>`<th style="padding:10px 14px;background:var(--surface2);font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;text-align:left">${h}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${PPA_DATA.map(p=>`
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:10px 14px;font-weight:600">${p.name}</td>
+          <td style="padding:10px 14px;color:var(--t2)">${p.iso}</td>
+          <td style="padding:10px 14px;color:var(--t2)">${p.state}</td>
+          <td style="padding:10px 14px">
+            <select data-ppa-id="${p.id}" style="padding:3px 8px;border-radius:20px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:var(--font);${PPA_STAGE_STYLE[p.stage]||PPA_STAGE_STYLE['']}">
+              <option value=""    ${p.stage===''    ?'selected':''}>—</option>
+              <option value="RFP" ${p.stage==='RFP' ?'selected':''}>RFP</option>
+              <option value="SL"  ${p.stage==='SL'  ?'selected':''}>SL</option>
+              <option value="BL"  ${p.stage==='BL'  ?'selected':''}>BL</option>
+              <option value="계약" ${p.stage==='계약'?'selected':''}>${contractLabel}</option>
+            </select>
+          </td>
+          <td style="padding:10px 14px;font-size:11px;color:var(--t2)">${p.note}</td>
+        </tr>`).join('')}
+    </tbody>`;
+
+  // 단계 변경 이벤트
+  document.querySelectorAll('[data-ppa-id]').forEach(sel => {
+    sel.onchange = () => {
+      const p = PPA_DATA.find(x => x.id === sel.dataset.ppaId);
+      if (p) { p.stage = sel.value; savePPA(); renderPPA(); }
+    };
+  });
+}
+
+document.getElementById('btn-ppa').addEventListener('click', () => {
+  document.getElementById('page-ppa').style.display = 'block';
+  renderPPA();
+});
+document.getElementById('close-ppa').addEventListener('click', () => {
+  document.getElementById('page-ppa').style.display = 'none';
+});
+</script>
+
+<style>
+.tb-page-btn {
+  padding:5px 12px;
+  background:rgba(52,211,153,.12);
+  border:1px solid rgba(52,211,153,.3);
+  border-radius:8px;font-size:12px;font-weight:600;
+  color:#34D399;cursor:pointer;font-family:var(--font);
+  transition:all .15s;white-space:nowrap;
+}
+.tb-page-btn:hover { background:rgba(52,211,153,.22); }
+</style>
+</body>
+</html>
